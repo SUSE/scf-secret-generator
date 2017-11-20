@@ -1,7 +1,12 @@
 package main
 
 import (
+	"crypto/rand"
+	"crypto/rsa"
+	"crypto/x509"
+	"encoding/pem"
 	"fmt"
+	"golang.org/x/crypto/ssh"
 	"io/ioutil"
 	"log"
 	"os"
@@ -13,11 +18,12 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
+	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
 
 // The name of the secret stored in the kube API
-const SECRET_NAME = "secret"
+const SECRET_NAME = "secret-alex"
 
 // GeneratorType describes the type of generator used for the configuration value
 type GeneratorType string
@@ -30,12 +36,22 @@ const (
 	GeneratorTypeCertificate   = GeneratorType("Certificate")   // Certificate
 )
 
+// ValueType describes the type of generator used for the configuration value
+type ValueType string
+
+// These are the available generator types for configuration values
+const (
+	ValueTypeFingerprint = ValueType("fingerprint")
+	ValueTypePrivateKey  = ValueType("private_key")
+)
+
 // ConfigurationVariableGenerator describes how to automatically generate values
 // for a configuration variable
 type ConfigurationVariableGenerator struct {
 	ID        string        `yaml:"id"`
 	Type      GeneratorType `yaml:"type"`
-	ValueType string        `yaml:"value_type"`
+	ValueType ValueType     `yaml:"value_type"`
+	KeyLength int           `yaml:"key_length"`
 }
 
 // ConfigurationVariable is a configuration to be exposed to the IaaS
@@ -87,6 +103,12 @@ type Manifest struct {
 	Configuration *Configuration `yaml:"configuration"`
 }
 
+type SSHKey struct {
+	Length      int
+	PrivateKey  string // Name to associate with private key
+	Fingerprint string // Name to associate with fingerprint
+}
+
 // generatePassword generates a password for `secretName` if it doesn't already exist
 func generatePassword(secretData map[string][]byte, secretName string) bool {
 	secretKey := strings.Replace(strings.ToLower(secretName), "_", "-", -1)
@@ -105,19 +127,12 @@ func printHelp() {
 	fmt.Printf("Usage: %s <role-manifest>\n", os.Args[0])
 }
 
-func main() {
-	if len(os.Args) != 2 {
-		printHelp()
-		os.Exit(1)
-	}
-
-	// Read the manifest file
-	manifestFile, err := ioutil.ReadFile(os.Args[1])
+func getManifest(name string) (manifest Manifest) {
+	manifestFile, err := ioutil.ReadFile(name)
 	if err != nil {
 		log.Fatal(err)
 	}
 
-	var manifest Manifest
 	if err = yaml.Unmarshal(manifestFile, &manifest); err != nil {
 		log.Fatal(err)
 	}
@@ -126,21 +141,42 @@ func main() {
 		log.Fatal("'configuration section' not found in manifest")
 	}
 
+	return
+}
+
+func getSecrets() corev1.SecretInterface {
 	// Set up access to the kube API
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {
-		panic(err.Error())
+		log.Fatal(err)
 	}
 
 	clientSet, err := kubernetes.NewForConfig(kubeConfig)
 	if err != nil {
-		panic(err.Error())
+		log.Fatal(err)
 	}
 
-	s := clientSet.CoreV1().Secrets(os.Getenv("KUBERNETES_NAMESPACE"))
+	return clientSet.CoreV1().Secrets(os.Getenv("KUBERNETES_NAMESPACE"))
+}
 
+func updateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty bool) {
+	if create {
+		_, err := s.Create(secrets)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("Created `secret`")
+	} else if dirty {
+		_, err := s.Update(secrets)
+		if err != nil {
+			log.Fatal(err)
+		}
+		log.Println("Updated `secret`")
+	}
+}
+
+func getOrCreateSecret(s corev1.SecretInterface) (create bool, secrets *v1.Secret) {
 	// check for existing secret, initialize a new Secret if not found
-	create := false
 	secrets, err := s.Get(SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
@@ -158,7 +194,64 @@ func main() {
 		}
 	}
 
-	dirty := false
+	return
+}
+
+func generateSSHKey(secretData map[string][]byte, key SSHKey) {
+
+	log.Printf("Creating private key: %+v\n", key)
+
+	// generate private key
+	private, err := rsa.GenerateKey(rand.Reader, key.Length)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	privateBlock := pem.Block{
+		Type:    "RSA PRIVATE KEY",
+		Headers: nil,
+		Bytes:   x509.MarshalPKCS1PrivateKey(private),
+	}
+
+	// PEM encode private key
+	secretKey := strings.Replace(strings.ToLower(key.PrivateKey), "_", "-", -1)
+	secretData[secretKey] = pem.EncodeToMemory(&privateBlock)
+
+	// generate MD5 fingerprint
+	public, err := ssh.NewPublicKey(&private.PublicKey)
+	if err != nil {
+		log.Fatal(err)
+	}
+
+	fingerprintKey := strings.Replace(strings.ToLower(key.Fingerprint), "_", "-", -1)
+	secretData[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
+}
+
+func parseSSHKey(keys map[string]SSHKey, configVar *ConfigurationVariable) {
+
+	var key SSHKey
+
+	if _, ok := keys[configVar.Generator.ID]; ok {
+		key = keys[configVar.Generator.ID]
+	}
+
+	if configVar.Generator.ValueType == ValueTypeFingerprint {
+		key.Fingerprint = configVar.Name
+	} else if configVar.Generator.ValueType == ValueTypePrivateKey {
+		key.PrivateKey = configVar.Name
+
+		if configVar.Generator.KeyLength == 0 {
+			key.Length = 4096
+		} else {
+			key.Length = configVar.Generator.KeyLength
+		}
+	}
+
+	keys[configVar.Generator.ID] = key
+}
+
+func generateSecrets(manifest Manifest, secrets *v1.Secret) (dirty bool) {
+	sshKeys := make(map[string]SSHKey)
 
 	// go over the list of variables and run the appropriate generator function
 	for _, configVar := range manifest.Configuration.Variables {
@@ -168,22 +261,31 @@ func main() {
 			} else if configVar.Generator.Type == GeneratorTypeCACertificate {
 			} else if configVar.Generator.Type == GeneratorTypeCertificate {
 			} else if configVar.Generator.Type == GeneratorTypeSSH {
+				parseSSHKey(sshKeys, configVar)
 			}
 		}
 	}
 
-	// Create or update the secret
-	if create {
-		_, err = s.Create(secrets)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Println("Created `secret`")
-	} else if dirty {
-		_, err = s.Update(secrets)
-		if err != nil {
-			log.Fatal(err)
-		}
-		log.Println("Updated `secret`")
+	for _, key := range sshKeys {
+		generateSSHKey(secrets.Data, key)
 	}
+
+	return
+}
+
+func main() {
+	if len(os.Args) != 2 {
+		printHelp()
+		os.Exit(1)
+	}
+
+	manifest := getManifest(os.Args[1])
+
+	s := getSecrets()
+
+	create, secrets := getOrCreateSecret(s)
+
+	dirty := generateSecrets(manifest, secrets)
+
+	updateSecrets(s, secrets, create, dirty)
 }
