@@ -147,6 +147,12 @@
 
 [[projects]]
   branch = "master"
+  name = "golang.org/x/crypto"
+  packages = ["curve25519","ed25519","ed25519/internal/edwards25519","ssh"]
+  revision = "9f005a07e0d31d45e6656d241bb5c0f2efd4bc94"
+
+[[projects]]
+  branch = "master"
   name = "golang.org/x/net"
   packages = ["http2","http2/hpack","idna","lex/httplex"]
   revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
@@ -196,6 +202,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "00d08926d6de856da4c98c146e19798a589c9dfe9698bfe02c0dc5b957011fba"
+  inputs-digest = "4332dbcbdd670c476fa6ef92150ea5b9392fc061203744b1ed48e4898c959645"
   solver-name = "gps-cdcl"
   solver-version = 1
