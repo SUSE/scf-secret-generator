@@ -89,7 +89,7 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
 	}
 
 	for _, key := range sshKeys {
-		ssh.GenerateSSHKey(secrets.Data, key)
+		dirty = ssh.GenerateSSHKey(secrets.Data, key) || dirty
 	}
 
 	return
