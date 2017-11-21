@@ -83,7 +83,7 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
 			} else if configVar.Generator.Type == model.GeneratorTypeCACertificate {
 			} else if configVar.Generator.Type == model.GeneratorTypeCertificate {
 			} else if configVar.Generator.Type == model.GeneratorTypeSSH {
-				ssh.ParseSSHKey(sshKeys, configVar)
+				ssh.RecordSSHKeyInfo(sshKeys, configVar)
 			}
 		}
 	}
