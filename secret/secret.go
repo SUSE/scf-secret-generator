@@ -50,7 +50,7 @@ func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty b
 	}
 }
 
-func GetOrCreateSecret(s corev1.SecretInterface) (create bool, secrets *v1.Secret) {
+func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secret) {
 	// check for existing secret, initialize a new Secret if not found
 	secrets, err := s.Get(SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
