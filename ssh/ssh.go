@@ -7,9 +7,9 @@ import (
 	"encoding/pem"
 	"golang.org/x/crypto/ssh"
 	"log"
-	"strings"
 
 	"github.com/SUSE/scf-secret-generator/model"
+	"github.com/SUSE/scf-secret-generator/util"
 )
 
 type SSHKey struct {
@@ -18,7 +18,7 @@ type SSHKey struct {
 }
 
 func GenerateSSHKey(secretData map[string][]byte, key SSHKey) bool {
-	secretKey := strings.Replace(strings.ToLower(key.PrivateKey), "_", "-", -1)
+	secretKey := util.ConvertNameToKey(key.PrivateKey)
 
 	// Only create keys, don't update them
 	if _, ok := secretData[secretKey]; !ok {
@@ -43,7 +43,7 @@ func GenerateSSHKey(secretData map[string][]byte, key SSHKey) bool {
 			log.Fatal(err)
 		}
 
-		fingerprintKey := strings.Replace(strings.ToLower(key.Fingerprint), "_", "-", -1)
+		fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 		secretData[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
 		return true
 	}
