@@ -52,11 +52,9 @@ func GenerateSSHKey(secretData map[string][]byte, key SSHKey) bool {
 }
 
 func ParseSSHKey(keys map[string]SSHKey, configVar *model.ConfigurationVariable) {
-	var key SSHKey
-
-	if _, ok := keys[configVar.Generator.ID]; ok {
-		key = keys[configVar.Generator.ID]
-	}
+	// Get or create the key from the map, there should always be
+	// a pair of private keys and fingerprints
+	key := keys[configVar.Generator.ID]
 
 	if configVar.Generator.ValueType == model.ValueTypeFingerprint {
 		key.Fingerprint = configVar.Name
