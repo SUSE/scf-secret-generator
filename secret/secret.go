@@ -19,7 +19,7 @@ import (
 // The name of the secret stored in the kube API
 const SECRET_NAME = "secret"
 
-func GetSecrets() corev1.SecretInterface {
+func GetSecretInterface() corev1.SecretInterface {
 	// Set up access to the kube API
 	kubeConfig, err := rest.InClusterConfig()
 	if err != nil {

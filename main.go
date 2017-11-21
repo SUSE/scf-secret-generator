@@ -20,7 +20,7 @@ func main() {
 
 	manifest := model.GetManifest(os.Args[1])
 
-	s := secret.GetSecrets()
+	s := secret.GetSecretInterface()
 
 	create, secrets := secret.GetOrCreateSecret(s)
 
