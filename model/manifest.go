@@ -84,18 +84,24 @@ type Manifest struct {
 	Configuration *Configuration `yaml:"configuration"`
 }
 
+var logFatal = log.Fatal
+var fileReader = ioutil.ReadFile
+
 func GetManifest(name string) (manifest Manifest) {
-	manifestFile, err := ioutil.ReadFile(name)
+	manifestFile, err := fileReader(name)
 	if err != nil {
-		log.Fatal(err)
+		logFatal(err)
+		return
 	}
 
 	if err = yaml.Unmarshal(manifestFile, &manifest); err != nil {
-		log.Fatal(err)
+		logFatal(err)
+		return
 	}
 
 	if manifest.Configuration == nil {
-		log.Fatal("'configuration section' not found in manifest")
+		logFatal("'configuration section' not found in manifest")
+		return
 	}
 
 	return
