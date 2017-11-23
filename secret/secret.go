@@ -19,16 +19,26 @@ import (
 // The name of the secret stored in the kube API
 const SECRET_NAME = "secret"
 
+var kubeClusterConfig = rest.InClusterConfig
+var kubeNewClient = kubernetes.NewForConfig
+var logFatal = log.Fatal
+
+var passGenerate = password.GeneratePassword
+var sshKeyGenerate = ssh.GenerateSSHKey
+var recordSSHKeyInfo = ssh.RecordSSHKeyInfo
+
 func GetSecretInterface() corev1.SecretInterface {
 	// Set up access to the kube API
-	kubeConfig, err := rest.InClusterConfig()
+	kubeConfig, err := kubeClusterConfig()
 	if err != nil {
-		log.Fatal(err)
+		logFatal(err)
+		return nil
 	}
 
-	clientSet, err := kubernetes.NewForConfig(kubeConfig)
+	clientSet, err := kubeNewClient(kubeConfig)
 	if err != nil {
-		log.Fatal(err)
+		logFatal(err)
+		return nil
 	}
 
 	return clientSet.CoreV1().Secrets(os.Getenv("KUBERNETES_NAMESPACE"))
@@ -38,13 +48,13 @@ func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty b
 	if create {
 		_, err := s.Create(secrets)
 		if err != nil {
-			log.Fatal(err)
+			logFatal(err)
 		}
 		log.Println("Created `secret`")
 	} else if dirty {
 		_, err := s.Update(secrets)
 		if err != nil {
-			log.Fatal(err)
+			logFatal(err)
 		}
 		log.Println("Updated `secret`")
 	}
@@ -65,7 +75,7 @@ func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secr
 				Data: map[string][]byte{},
 			}
 		} else {
-			log.Fatal(err)
+			logFatal(err)
 		}
 	}
 
@@ -79,17 +89,17 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Secret && configVar.Generator != nil {
 			if configVar.Generator.Type == model.GeneratorTypePassword {
-				dirty = password.GeneratePassword(secrets.Data, configVar.Name) || dirty
+				dirty = passGenerate(secrets.Data, configVar.Name) || dirty
 			} else if configVar.Generator.Type == model.GeneratorTypeCACertificate {
 			} else if configVar.Generator.Type == model.GeneratorTypeCertificate {
 			} else if configVar.Generator.Type == model.GeneratorTypeSSH {
-				ssh.RecordSSHKeyInfo(sshKeys, configVar)
+				recordSSHKeyInfo(sshKeys, configVar)
 			}
 		}
 	}
 
 	for _, key := range sshKeys {
-		dirty = ssh.GenerateSSHKey(secrets.Data, key) || dirty
+		dirty = sshKeyGenerate(secrets.Data, key) || dirty
 	}
 
 	return
