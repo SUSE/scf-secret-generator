@@ -7,6 +7,7 @@ import (
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
 	"github.com/SUSE/scf-secret-generator/ssh"
+	"github.com/SUSE/scf-secret-generator/ssl"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -88,11 +89,14 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
 	// go over the list of variables and run the appropriate generator function
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Secret && configVar.Generator != nil {
-			if configVar.Generator.Type == model.GeneratorTypePassword {
+			switch configVar.Generator.Type {
+			case model.GeneratorTypePassword:
 				dirty = passGenerate(secrets.Data, configVar.Name) || dirty
-			} else if configVar.Generator.Type == model.GeneratorTypeCACertificate {
-			} else if configVar.Generator.Type == model.GeneratorTypeCertificate {
-			} else if configVar.Generator.Type == model.GeneratorTypeSSH {
+
+			case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
+				ssl.RecordCertInfo(configVar)
+
+			case model.GeneratorTypeSSH:
 				recordSSHKeyInfo(sshKeys, configVar)
 			}
 		}
@@ -101,6 +105,8 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
 	for _, key := range sshKeys {
 		dirty = sshKeyGenerate(secrets.Data, key) || dirty
 	}
+
+	dirty = ssl.GenerateCerts(secrets) || dirty
 
 	return
 }

@@ -32,3 +32,7 @@
 [[constraint]]
   name = "k8s.io/client-go"
   version = "5.0.1"
+
+[[constraint]]
+  name = "github.com/cloudflare/cfssl"
+  revision = "9ada30affe7af7e87eb1c3056854b227a9a90998"
