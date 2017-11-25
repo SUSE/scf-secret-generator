@@ -5,6 +5,7 @@ import (
 	"os"
 	"strconv"
 	"strings"
+	"time"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/util"
@@ -50,32 +51,34 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	if configVar.Generator.RoleName != "" {
 		info.RoleName = configVar.Generator.RoleName
 	}
-
+	log.Infof("Recorded cert info for %s: %v", configVar.Generator.ID, info)
 	certInfo[configVar.Generator.ID] = info
 }
 
 func GenerateCerts(secrets *v1.Secret) (dirty bool) {
 	// generate all the CAs first because they are needed to sign the certs
-	for _, info := range certInfo {
+	for id, info := range certInfo {
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
-			dirty = createCA(secrets, info) || dirty
+			dirty = createCA(secrets, id) || dirty
 		}
 	}
-	for _, info := range certInfo {
+	for id, info := range certInfo {
 		if len(info.SubjectNames) > 0 || info.RoleName != "" {
-			dirty = createCert(secrets, info) || dirty
+			dirty = createCert(secrets, id) || dirty
 		}
 	}
 	return
 }
 
-func createCA(secrets *v1.Secret, info CertInfo) bool {
+func createCA(secrets *v1.Secret, id string) bool {
 	var err error
+	info := certInfo[id]
 
 	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
 		// fetch CA from secrets because we may need it to sign new certs
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
 		info.Certificate = secrets.Data[info.CertificateName]
+		log.Infof("Found CA in secrets: %v", info)
 		return false
 	}
 
@@ -91,6 +94,7 @@ func createCA(secrets *v1.Secret, info CertInfo) bool {
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
+	certInfo[id] = info
 	return true
 }
 
@@ -102,8 +106,9 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(secrets *v1.Secret, info CertInfo) bool {
+func createCert(secrets *v1.Secret, id string) bool {
 	var err error
+	info := certInfo[id]
 
 	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
 		return false
@@ -165,13 +170,17 @@ func createCert(secrets *v1.Secret, info CertInfo) bool {
 
 	signingProfile := &config.SigningProfile{
 		Usage:        []string{"server auth", "client auth"},
-		ExpiryString: "262800h", // 30 years
+		Expiry:       262800 * time.Hour, // 30 years
+		ExpiryString: "262800h",          // 30 years
 	}
-	policy := &config.Signing{Default: signingProfile}
+	policy := &config.Signing{
+		Profiles: map[string]*config.SigningProfile{},
+		Default:  signingProfile,
+	}
 
 	s, err := local.NewSigner(caKey, caCert, signer.DefaultSigAlgo(caKey), policy)
 	if err != nil {
-		log.Fatalf("Can't create signer: %s", err)
+		log.Fatalf("Cannot create signer: %s", err)
 	}
 
 	secrets.Data[info.CertificateName], err = s.Sign(signer.SignRequest{Request: string(signingReq)})
