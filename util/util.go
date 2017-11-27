@@ -31,3 +31,11 @@ func ExpandEnvTemplates(str string) string {
 	t.Execute(buf, env)
 	return buf.String()
 }
+
+func QuoteNewlines(str []byte) []byte {
+	return []byte(strings.Replace(string(str), "\n", "\\n", -1))
+}
+
+func UnquoteNewlines(str []byte) []byte {
+	return []byte(strings.Replace(string(str), "\\n", "\n", -1))
+}

@@ -76,8 +76,8 @@ func createCA(secrets *v1.Secret, id string) bool {
 
 	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
 		// fetch CA from secrets because we may need it to sign new certs
-		info.PrivateKey = secrets.Data[info.PrivateKeyName]
-		info.Certificate = secrets.Data[info.CertificateName]
+		info.PrivateKey = util.UnquoteNewlines(secrets.Data[info.PrivateKeyName])
+		info.Certificate = util.UnquoteNewlines(secrets.Data[info.CertificateName])
 		log.Infof("Found CA in secrets: %v", info)
 		return false
 	}
@@ -92,8 +92,8 @@ func createCA(secrets *v1.Secret, id string) bool {
 		log.Fatalf("Cannot create CA: %s", err)
 	}
 
-	secrets.Data[info.PrivateKeyName] = info.PrivateKey
-	secrets.Data[info.CertificateName] = info.Certificate
+	secrets.Data[info.PrivateKeyName] = util.QuoteNewlines(info.PrivateKey)
+	secrets.Data[info.CertificateName] = util.QuoteNewlines(info.Certificate)
 	certInfo[id] = info
 	return true
 }
@@ -154,7 +154,7 @@ func createCert(secrets *v1.Secret, id string) bool {
 
 	var signingReq []byte
 	g := &csr.Generator{Validator: genkey.Validator}
-	signingReq, secrets.Data[info.PrivateKeyName], err = g.ProcessRequest(&req)
+	signingReq, info.PrivateKey, err = g.ProcessRequest(&req)
 	if err != nil {
 		log.Fatalf("Cannot generate cert: %s", err)
 	}
@@ -183,10 +183,14 @@ func createCert(secrets *v1.Secret, id string) bool {
 		log.Fatalf("Cannot create signer: %s", err)
 	}
 
-	secrets.Data[info.CertificateName], err = s.Sign(signer.SignRequest{Request: string(signingReq)})
+	info.Certificate, err = s.Sign(signer.SignRequest{Request: string(signingReq)})
 	if err != nil {
 		log.Fatalf("Failed to sign cert: %s", err)
 	}
+
+	secrets.Data[info.PrivateKeyName] = util.QuoteNewlines(info.PrivateKey)
+	secrets.Data[info.CertificateName] = util.QuoteNewlines(info.Certificate)
+	certInfo[id] = info
 
 	return true
 }
