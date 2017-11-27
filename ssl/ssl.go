@@ -69,6 +69,10 @@ func GenerateCerts(secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
 	return
 }
 
+func rsaKeyRequest() *csr.BasicKeyRequest {
+	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
+}
+
 func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	var err error
 	info := certInfo[id]
@@ -87,7 +91,7 @@ func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	req := csr.CertificateRequest{
 		CA:         &csr.CAConfig{Expiry: "262800h"}, // 30 years
 		CN:         "SCF CA",
-		KeyRequest: csr.NewBasicKeyRequest(),
+		KeyRequest: rsaKeyRequest(),
 	}
 	info.Certificate, _, info.PrivateKey, err = initca.New(&req)
 	if err != nil {
@@ -125,7 +129,7 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		log.Fatalf("CA %s not found", DEFAULT_CA)
 	}
 
-	req := csr.CertificateRequest{KeyRequest: csr.NewBasicKeyRequest()}
+	req := csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
 
 	if info.RoleName != "" {
 		// get role instance count from environment
