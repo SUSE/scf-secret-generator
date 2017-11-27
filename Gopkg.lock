@@ -14,6 +14,11 @@
   revision = "de5bf2ad457846296e2031421a34e2568e304e35"
 
 [[projects]]
+  name = "github.com/cloudflare/cfssl"
+  packages = ["api","api/client","auth","certdb","cli","cli/genkey","config","crypto/pkcs7","csr","errors","helpers","helpers/derhelpers","info","initca","log","ocsp/config","signer","signer/local","signer/remote","signer/universal"]
+  revision = "9ada30affe7af7e87eb1c3056854b227a9a90998"
+
+[[projects]]
   name = "github.com/davecgh/go-spew"
   packages = ["spew"]
   revision = "346938d642f2ec3594ed81d874461961cd0faa76"
@@ -93,6 +98,12 @@
 
 [[projects]]
   branch = "master"
+  name = "github.com/google/certificate-transparency-go"
+  packages = [".","asn1","client","client/configpb","jsonclient","tls","x509","x509/pkix"]
+  revision = "fb87030ddae36e1be45e09ece5f1911fc60ae086"
+
+[[projects]]
+  branch = "master"
   name = "github.com/google/gofuzz"
   packages = ["."]
   revision = "24818f796faf91cd76ec7bddd72458fbced7a6c1"
@@ -166,13 +177,13 @@
 [[projects]]
   branch = "master"
   name = "golang.org/x/crypto"
-  packages = ["curve25519","ed25519","ed25519/internal/edwards25519","ssh"]
+  packages = ["curve25519","ed25519","ed25519/internal/edwards25519","ocsp","pkcs12","pkcs12/internal/rc2","ssh"]
   revision = "9f005a07e0d31d45e6656d241bb5c0f2efd4bc94"
 
 [[projects]]
   branch = "master"
   name = "golang.org/x/net"
-  packages = ["http2","http2/hpack","idna","lex/httplex"]
+  packages = ["context","context/ctxhttp","http2","http2/hpack","idna","lex/httplex"]
   revision = "a337091b0525af65de94df2eb7e98bd9962dcbe2"
 
 [[projects]]
@@ -220,6 +231,6 @@
 [solve-meta]
   analyzer-name = "dep"
   analyzer-version = 1
-  inputs-digest = "ef3b459d23fac53ad289e6f3203365c684b0432669adb34809f1934879720e72"
+  inputs-digest = "a94030397b31de62e9830242382903e4961932d0997c9d099af404babb3f134e"
   solver-name = "gps-cdcl"
   solver-version = 1
