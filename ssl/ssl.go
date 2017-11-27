@@ -75,8 +75,8 @@ func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 
 	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
 		// fetch CA from secrets because we may need it to sign new certs
-		info.PrivateKey = util.UnquoteNewlines(secrets.Data[info.PrivateKeyName])
-		info.Certificate = util.UnquoteNewlines(secrets.Data[info.CertificateName])
+		info.PrivateKey = secrets.Data[info.PrivateKeyName]
+		info.Certificate = secrets.Data[info.CertificateName]
 		certInfo[id] = info
 		return false
 	}
@@ -94,8 +94,8 @@ func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		log.Fatalf("Cannot create CA: %s", err)
 	}
 
-	secrets.Data[info.PrivateKeyName] = util.QuoteNewlines(info.PrivateKey)
-	secrets.Data[info.CertificateName] = util.QuoteNewlines(info.Certificate)
+	secrets.Data[info.PrivateKeyName] = info.PrivateKey
+	secrets.Data[info.CertificateName] = info.Certificate
 	certInfo[id] = info
 	return true
 }
@@ -193,8 +193,8 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		log.Fatalf("Failed to sign cert: %s", err)
 	}
 
-	secrets.Data[info.PrivateKeyName] = util.QuoteNewlines(info.PrivateKey)
-	secrets.Data[info.CertificateName] = util.QuoteNewlines(info.Certificate)
+	secrets.Data[info.PrivateKeyName] = info.PrivateKey
+	secrets.Data[info.CertificateName] = info.Certificate
 	certInfo[id] = info
 
 	return true
@@ -211,8 +211,8 @@ func updateCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
 
 		// keep cert info in case this is a CA
-		info.PrivateKey = util.UnquoteNewlines(secrets.Data[info.PrivateKeyName])
-		info.Certificate = util.UnquoteNewlines(secrets.Data[info.CertificateName])
+		info.PrivateKey = secrets.Data[info.PrivateKeyName]
+		info.Certificate = secrets.Data[info.CertificateName]
 		certInfo[id] = info
 
 		return true
