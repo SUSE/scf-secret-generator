@@ -5,8 +5,9 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
-	"golang.org/x/crypto/ssh"
 	"log"
+
+	"golang.org/x/crypto/ssh"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/util"
@@ -17,12 +18,23 @@ type SSHKey struct {
 	Fingerprint string // Name to associate with fingerprint
 }
 
-func GenerateSSHKey(secretData map[string][]byte, key SSHKey) bool {
+func GenerateSSHKey(secretData map[string][]byte, updateData map[string][]byte, key SSHKey) bool {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
+	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
 	// Only create keys, don't update them
 	if _, ok := secretData[secretKey]; ok {
 		return false
+	}
+
+	// Prefer user supplied update data over generating the keys ourselves
+	if _, ok := updateData[secretKey]; ok {
+		if _, ok := updateData[fingerprintKey]; !ok {
+			log.Fatalf("Update include %s but not %s", secretKey, fingerprintKey)
+		}
+		secretData[secretKey] = updateData[secretKey]
+		secretData[fingerprintKey] = updateData[fingerprintKey]
+		return true
 	}
 
 	// generate private key
@@ -46,7 +58,6 @@ func GenerateSSHKey(secretData map[string][]byte, key SSHKey) bool {
 		log.Fatal(err)
 	}
 
-	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 	secretData[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
 	return true
 }

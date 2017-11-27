@@ -51,26 +51,25 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	if configVar.Generator.RoleName != "" {
 		info.RoleName = configVar.Generator.RoleName
 	}
-	log.Infof("Recorded cert info for %s: %v", configVar.Generator.ID, info)
 	certInfo[configVar.Generator.ID] = info
 }
 
-func GenerateCerts(secrets *v1.Secret) (dirty bool) {
+func GenerateCerts(secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
-			dirty = createCA(secrets, id) || dirty
+			dirty = createCA(secrets, updates, id) || dirty
 		}
 	}
 	for id, info := range certInfo {
 		if len(info.SubjectNames) > 0 || info.RoleName != "" {
-			dirty = createCert(secrets, id) || dirty
+			dirty = createCert(secrets, updates, id) || dirty
 		}
 	}
 	return
 }
 
-func createCA(secrets *v1.Secret, id string) bool {
+func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	var err error
 	info := certInfo[id]
 
@@ -78,8 +77,11 @@ func createCA(secrets *v1.Secret, id string) bool {
 		// fetch CA from secrets because we may need it to sign new certs
 		info.PrivateKey = util.UnquoteNewlines(secrets.Data[info.PrivateKeyName])
 		info.Certificate = util.UnquoteNewlines(secrets.Data[info.CertificateName])
-		log.Infof("Found CA in secrets: %v", info)
+		certInfo[id] = info
 		return false
+	}
+	if updateCert(secrets, updates, id) {
+		return true
 	}
 
 	req := csr.CertificateRequest{
@@ -106,12 +108,15 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(secrets *v1.Secret, id string) bool {
+func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	var err error
 	info := certInfo[id]
 
 	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
 		return false
+	}
+	if updateCert(secrets, updates, id) {
+		return true
 	}
 
 	// XXX Add support for multiple CAs
@@ -193,4 +198,27 @@ func createCert(secrets *v1.Secret, id string) bool {
 	certInfo[id] = info
 
 	return true
+}
+
+func updateCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
+	info := certInfo[id]
+
+	if _, ok := updates.Data[info.PrivateKeyName]; ok {
+		if _, ok := updates.Data[info.CertificateName]; !ok {
+			log.Fatalf("Update include %s but not %s", info.PrivateKeyName, info.CertificateName)
+		}
+		secrets.Data[info.PrivateKeyName] = updates.Data[info.PrivateKeyName]
+		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
+
+		// keep cert info in case this is a CA
+		info.PrivateKey = util.UnquoteNewlines(secrets.Data[info.PrivateKeyName])
+		info.Certificate = util.UnquoteNewlines(secrets.Data[info.CertificateName])
+		certInfo[id] = info
+
+		return true
+	}
+	if _, ok := updates.Data[info.CertificateName]; ok {
+		log.Fatalf("Update include %s but not %s", info.CertificateName, info.PrivateKeyName)
+	}
+	return false
 }

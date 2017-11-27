@@ -16,13 +16,14 @@ import (
 func TestNewKeyIsCreated(t *testing.T) {
 	assert := assert.New(t)
 	secretData := make(map[string][]byte)
+	updateData := make(map[string][]byte)
 
 	key := SSHKey{
 		PrivateKey:  "foo",
 		Fingerprint: "bar",
 	}
 
-	result := GenerateSSHKey(secretData, key)
+	result := GenerateSSHKey(secretData, updateData, key)
 
 	assert.True(result)
 
@@ -41,6 +42,7 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 	barData := []byte("bar-data")
 
 	secretData := make(map[string][]byte)
+	updateData := make(map[string][]byte)
 
 	// Also tests for FOO / foo case conversion
 	secretData["foo"] = fooData
@@ -51,7 +53,7 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 		Fingerprint: "BAR",
 	}
 
-	result := GenerateSSHKey(secretData, key)
+	result := GenerateSSHKey(secretData, updateData, key)
 	assert.False(result)
 	assert.Equal(secretData["foo"], fooData)
 	assert.Equal(secretData["bar"], barData)
