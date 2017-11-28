@@ -158,9 +158,7 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		addHost(&req, false, name)
 	}
 
-	// use first host as canonical name
 	req.CN = req.Hosts[0]
-	req.Hosts = req.Hosts[1:]
 
 	var signingReq []byte
 	g := &csr.Generator{Validator: genkey.Validator}
