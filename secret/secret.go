@@ -7,6 +7,8 @@ import (
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
 	"github.com/SUSE/scf-secret-generator/ssh"
+	"github.com/SUSE/scf-secret-generator/ssl"
+	"github.com/SUSE/scf-secret-generator/util"
 
 	v1 "k8s.io/api/core/v1"
 	"k8s.io/apimachinery/pkg/api/errors"
@@ -18,6 +20,9 @@ import (
 
 // The name of the secret stored in the kube API
 const SECRET_NAME = "secret"
+
+// The name of the secret updates stored in the kube API
+const SECRET_UPDATE_NAME = "secret-update"
 
 var kubeClusterConfig = rest.InClusterConfig
 var kubeNewClient = kubernetes.NewForConfig
@@ -60,9 +65,15 @@ func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty b
 	}
 }
 
-func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secret) {
+func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secret, updates *v1.Secret) {
+	// secret updates *must* exist
+	updates, err := s.Get(SECRET_UPDATE_NAME, metav1.GetOptions{})
+	if err != nil {
+		logFatal(err)
+	}
+
 	// check for existing secret, initialize a new Secret if not found
-	secrets, err := s.Get(SECRET_NAME, metav1.GetOptions{})
+	secrets, err = s.Get(SECRET_NAME, metav1.GetOptions{})
 	if err != nil {
 		if errors.IsNotFound(err) {
 			log.Println("`secret` not found, creating")
@@ -82,25 +93,43 @@ func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secr
 	return
 }
 
-func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret) (dirty bool) {
+func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
 	sshKeys := make(map[string]ssh.SSHKey)
 
 	// go over the list of variables and run the appropriate generator function
 	for _, configVar := range manifest.Configuration.Variables {
-		if configVar.Secret && configVar.Generator != nil {
-			if configVar.Generator.Type == model.GeneratorTypePassword {
-				dirty = passGenerate(secrets.Data, configVar.Name) || dirty
-			} else if configVar.Generator.Type == model.GeneratorTypeCACertificate {
-			} else if configVar.Generator.Type == model.GeneratorTypeCertificate {
-			} else if configVar.Generator.Type == model.GeneratorTypeSSH {
-				recordSSHKeyInfo(sshKeys, configVar)
+		if configVar.Secret {
+			if configVar.Generator == nil {
+				dirty = updateVariable(secrets, updates, configVar) || dirty
+			} else {
+				switch configVar.Generator.Type {
+				case model.GeneratorTypePassword:
+					dirty = passGenerate(secrets.Data, updates.Data, configVar.Name) || dirty
+
+				case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
+					ssl.RecordCertInfo(configVar)
+
+				case model.GeneratorTypeSSH:
+					recordSSHKeyInfo(sshKeys, configVar)
+				}
 			}
 		}
 	}
 
 	for _, key := range sshKeys {
-		dirty = sshKeyGenerate(secrets.Data, key) || dirty
+		dirty = sshKeyGenerate(secrets.Data, updates.Data, key) || dirty
 	}
 
+	dirty = ssl.GenerateCerts(secrets, updates) || dirty
+
+	return
+}
+
+func updateVariable(secrets *v1.Secret, updates *v1.Secret, configVar *model.ConfigurationVariable) (dirty bool) {
+	name := util.ConvertNameToKey(configVar.Name)
+	if len(secrets.Data[name]) == 0 && len(updates.Data[name]) > 0 {
+		secrets.Data[name] = updates.Data[name]
+		dirty = true
+	}
 	return
 }

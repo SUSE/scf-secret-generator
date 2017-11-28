@@ -1,9 +1,10 @@
 package model
 
 import (
-	"gopkg.in/yaml.v2"
 	"io/ioutil"
 	"log"
+
+	"gopkg.in/yaml.v2"
 )
 
 // GeneratorType describes the type of generator used for the configuration value
@@ -22,6 +23,7 @@ type ValueType string
 
 // These are the available generator types for configuration values
 const (
+	ValueTypeCertificate = ValueType("certificate")
 	ValueTypeFingerprint = ValueType("fingerprint")
 	ValueTypePrivateKey  = ValueType("private_key")
 )
@@ -29,10 +31,11 @@ const (
 // ConfigurationVariableGenerator describes how to automatically generate values
 // for a configuration variable
 type ConfigurationVariableGenerator struct {
-	ID        string        `yaml:"id"`
-	Type      GeneratorType `yaml:"type"`
-	ValueType ValueType     `yaml:"value_type"`
-	KeyLength int           `yaml:"key_length"`
+	ID           string        `yaml:"id,omitempty"`
+	Type         GeneratorType `yaml:"type"`
+	ValueType    ValueType     `yaml:"value_type,omitempty"`
+	SubjectNames []string      `yaml:"subject_names,omitempty"`
+	RoleName     string        `yaml:"role_name,omitempty"`
 }
 
 // ConfigurationVariable is a configuration to be exposed to the IaaS

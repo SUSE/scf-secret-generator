@@ -22,9 +22,9 @@ func main() {
 
 	s := secret.GetSecretInterface()
 
-	create, secrets := secret.GetOrCreateSecrets(s)
+	create, secrets, updates := secret.GetOrCreateSecrets(s)
 
-	dirty := secret.GenerateSecrets(manifest, secrets)
+	dirty := secret.GenerateSecrets(manifest, secrets, updates)
 
 	secret.UpdateSecrets(s, secrets, create, dirty)
 }
