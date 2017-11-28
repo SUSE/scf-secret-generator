@@ -23,18 +23,21 @@ func GenerateSSHKey(secretData map[string][]byte, updateData map[string][]byte, 
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
 	// Only create keys, don't update them
-	if _, ok := secretData[secretKey]; ok {
+	if len(secretData[secretKey]) > 0 {
 		return false
 	}
 
 	// Prefer user supplied update data over generating the keys ourselves
-	if _, ok := updateData[secretKey]; ok {
-		if _, ok := updateData[fingerprintKey]; !ok {
-			log.Fatalf("Update include %s but not %s", secretKey, fingerprintKey)
+	if len(updateData[secretKey]) > 0 {
+		if len(updateData[fingerprintKey]) == 0 {
+			log.Fatalf("Update includes %s but not %s", secretKey, fingerprintKey)
 		}
 		secretData[secretKey] = updateData[secretKey]
 		secretData[fingerprintKey] = updateData[fingerprintKey]
 		return true
+	}
+	if len(updateData[fingerprintKey]) > 0 {
+		log.Fatalf("Update includes %s but not %s", fingerprintKey, secretKey)
 	}
 
 	// generate private key

@@ -77,7 +77,7 @@ func createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	var err error
 	info := certInfo[id]
 
-	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
+	if len(secrets.Data[info.PrivateKeyName]) > 0 {
 		// fetch CA from secrets because we may need it to sign new certs
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
 		info.Certificate = secrets.Data[info.CertificateName]
@@ -116,7 +116,7 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	var err error
 	info := certInfo[id]
 
-	if _, ok := secrets.Data[info.PrivateKeyName]; ok {
+	if len(secrets.Data[info.PrivateKeyName]) > 0 {
 		return false
 	}
 	if updateCert(secrets, updates, id) {
@@ -207,9 +207,9 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 func updateCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	info := certInfo[id]
 
-	if _, ok := updates.Data[info.PrivateKeyName]; ok {
-		if _, ok := updates.Data[info.CertificateName]; !ok {
-			log.Fatalf("Update include %s but not %s", info.PrivateKeyName, info.CertificateName)
+	if len(updates.Data[info.PrivateKeyName]) > 0 {
+		if len(updates.Data[info.CertificateName]) == 0 {
+			log.Fatalf("Update includes %s but not %s", info.PrivateKeyName, info.CertificateName)
 		}
 		secrets.Data[info.PrivateKeyName] = updates.Data[info.PrivateKeyName]
 		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
@@ -221,8 +221,8 @@ func updateCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 
 		return true
 	}
-	if _, ok := updates.Data[info.CertificateName]; ok {
-		log.Fatalf("Update include %s but not %s", info.CertificateName, info.PrivateKeyName)
+	if len(updates.Data[info.CertificateName]) > 0 {
+		log.Fatalf("Update includes %s but not %s", info.CertificateName, info.PrivateKeyName)
 	}
 	return false
 }

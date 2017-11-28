@@ -127,11 +127,9 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Se
 
 func updateVariable(secrets *v1.Secret, updates *v1.Secret, configVar *model.ConfigurationVariable) (dirty bool) {
 	name := util.ConvertNameToKey(configVar.Name)
-	if _, ok := secrets.Data[name]; !ok {
-		if _, ok = updates.Data[name]; ok {
-			secrets.Data[name] = updates.Data[name]
-			dirty = true
-		}
+	if len(secrets.Data[name]) == 0 && len(updates.Data[name]) > 0 {
+		secrets.Data[name] = updates.Data[name]
+		dirty = true
 	}
 	return
 }

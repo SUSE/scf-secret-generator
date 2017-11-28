@@ -10,10 +10,11 @@ func GeneratePassword(secretData map[string][]byte, updateData map[string][]byte
 	secretKey := util.ConvertNameToKey(secretName)
 
 	// Only create keys, don't update them
-	if _, ok := secretData[secretKey]; ok {
+	if len(secretData[secretKey]) > 0 {
 		return false
 	}
-	if _, ok := updateData[secretKey]; ok {
+
+	if len(updateData[secretKey]) > 0 {
 		secretData[secretKey] = updateData[secretKey]
 	} else {
 		password := uniuri.NewLen(64)
