@@ -1,7 +1,7 @@
 # SCF Secret Generator
 
 A utility for [SUSE Cloud Foundry](https://github.com/SUSE/scf) for generating
-secrets based on the [role manifest](https://github.com/SUSE/scf/blob/develop/container-host-files/etc/hcf/config/role-manifest.yml).
+secrets based on the [role manifest](https://github.com/SUSE/scf/blob/develop/container-host-files/etc/scf/config/role-manifest.yml).
 
 It works in conjunction with the [fissile](https://github.com/SUSE/fissile) project.
 
@@ -19,7 +19,7 @@ It will not overwrite existing secrets, so is safe to run between upgrades.
 
 ## Usage
 
-scf-secret-generator is meant to run inside a [pre-flight Kubernetes job](https://github.com/SUSE/scf/blob/develop/src/hcf-release/jobs/generate-secrets/templates/run.erb).
+scf-secret-generator is meant to run inside a [pre-flight Kubernetes job](https://github.com/SUSE/scf/blob/develop/src/scf-helper-release/jobs/generate-secrets/templates/run.erb).
 This job should have the `KUBERNETES_NAMESPACE` environment variable set, and
 will create or update the secret called `secret` inside that namespace.
 
@@ -34,6 +34,6 @@ base64 decoded before using.
 ## Building
 
 A modern Go version is required. The version used in SCF is described in the
-[package spec](https://github.com/SUSE/scf/blob/develop/src/hcf-release/packages/generate-secrets/spec).
+[package spec](https://github.com/SUSE/scf/blob/develop/src/scf-helper-release/packages/generate-secrets/spec).
 
 `go build` will create the binary.
