@@ -141,7 +141,6 @@ func createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		}
 
 		addHost(&req, true, info.RoleName)
-		addHost(&req, true, info.RoleName+".{{.DOMAIN}}")
 		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc")
 		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
 
