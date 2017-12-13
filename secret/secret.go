@@ -66,8 +66,14 @@ func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty b
 }
 
 func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secret, updates *v1.Secret) {
+	secretUpdateName := SECRET_UPDATE_NAME
+	releaseRevision := os.Getenv("RELEASE_REVISION")
+	if releaseRevision != "" {
+		secretUpdateName += "-" + releaseRevision
+	}
+
 	// secret updates *must* exist
-	updates, err := s.Get(SECRET_UPDATE_NAME, metav1.GetOptions{})
+	updates, err := s.Get(secretUpdateName, metav1.GetOptions{})
 	if err != nil {
 		logFatal(err)
 	}
