@@ -14,7 +14,6 @@ import (
 	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
-	corev1 "k8s.io/client-go/kubernetes/typed/core/v1"
 	"k8s.io/client-go/rest"
 )
 
@@ -27,12 +26,21 @@ const SECRET_UPDATE_NAME = "secret-update"
 var kubeClusterConfig = rest.InClusterConfig
 var kubeNewClient = kubernetes.NewForConfig
 var logFatal = log.Fatal
+var getEnv = os.Getenv
+
+type secretInterface interface {
+	Create(*v1.Secret) (*v1.Secret, error)
+	Get(name string, options metav1.GetOptions) (*v1.Secret, error)
+	Update(*v1.Secret) (*v1.Secret, error)
+}
 
 var passGenerate = password.GeneratePassword
 var sshKeyGenerate = ssh.GenerateSSHKey
 var recordSSHKeyInfo = ssh.RecordSSHKeyInfo
+var recordSSLCertInfo = ssl.RecordCertInfo
+var generateSSLCerts = ssl.GenerateCerts
 
-func GetSecretInterface() corev1.SecretInterface {
+func GetSecretInterface() secretInterface {
 	// Set up access to the kube API
 	kubeConfig, err := kubeClusterConfig()
 	if err != nil {
@@ -46,10 +54,10 @@ func GetSecretInterface() corev1.SecretInterface {
 		return nil
 	}
 
-	return clientSet.CoreV1().Secrets(os.Getenv("KUBERNETES_NAMESPACE"))
+	return clientSet.CoreV1().Secrets(getEnv("KUBERNETES_NAMESPACE"))
 }
 
-func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty bool) {
+func UpdateSecrets(s secretInterface, secrets *v1.Secret, create, dirty bool) {
 	if create {
 		_, err := s.Create(secrets)
 		if err != nil {
@@ -65,9 +73,9 @@ func UpdateSecrets(s corev1.SecretInterface, secrets *v1.Secret, create, dirty b
 	}
 }
 
-func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secret, updates *v1.Secret) {
+func GetOrCreateSecrets(s secretInterface) (create bool, secrets *v1.Secret, updates *v1.Secret) {
 	secretUpdateName := SECRET_UPDATE_NAME
-	releaseRevision := os.Getenv("RELEASE_REVISION")
+	releaseRevision := getEnv("RELEASE_REVISION")
 	if releaseRevision != "" {
 		secretUpdateName += "-" + releaseRevision
 	}
@@ -76,6 +84,7 @@ func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secr
 	updates, err := s.Get(secretUpdateName, metav1.GetOptions{})
 	if err != nil {
 		logFatal(err)
+		return false, nil, nil
 	}
 
 	// check for existing secret, initialize a new Secret if not found
@@ -93,6 +102,7 @@ func GetOrCreateSecrets(s corev1.SecretInterface) (create bool, secrets *v1.Secr
 			}
 		} else {
 			logFatal(err)
+			return false, nil, nil
 		}
 	}
 
@@ -113,7 +123,7 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Se
 					dirty = passGenerate(secrets.Data, updates.Data, configVar.Name) || dirty
 
 				case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
-					ssl.RecordCertInfo(configVar)
+					recordSSLCertInfo(configVar)
 
 				case model.GeneratorTypeSSH:
 					recordSSHKeyInfo(sshKeys, configVar)
@@ -126,7 +136,7 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Se
 		dirty = sshKeyGenerate(secrets.Data, updates.Data, key) || dirty
 	}
 
-	dirty = ssl.GenerateCerts(secrets, updates) || dirty
+	dirty = generateSSLCerts(secrets, updates) || dirty
 
 	return
 }
