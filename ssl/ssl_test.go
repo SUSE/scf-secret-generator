@@ -222,6 +222,8 @@ func TestGenerateCerts(t *testing.T) {
 }
 
 func TestRsaKeyRequest(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 	kr := rsaKeyRequest()
 	assert.Equal(kr.S, 4096)
@@ -288,6 +290,8 @@ func TestCreateCA(t *testing.T) {
 }
 
 func TestAddHost(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 
 	//
@@ -506,6 +510,8 @@ func TestCreateCert(t *testing.T) {
 }
 
 func TestUpdateCert(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 
 	origLogFatalf := logFatalf
