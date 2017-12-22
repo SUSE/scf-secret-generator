@@ -131,6 +131,8 @@ func (m *MockSecrets) GenerateSSLCerts(secrets, updates *v1.Secret) (dirty bool)
 }
 
 func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
+	t.Parallel()
+
 	var s MockSecretInterface
 	s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
 	s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
@@ -158,6 +160,8 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 }
 
 func TestGetOrCreateWithValidSecrets(t *testing.T) {
+	t.Parallel()
+
 	//
 	// Set up mocked functions
 	//
@@ -533,31 +537,49 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 func TestUpdateVariable(t *testing.T) {
 	assert := assert.New(t)
 
-	secrets := v1.Secret{Data: map[string][]byte{}}
-	secrets.Data["not-in-updates"] = []byte("value2")
-	secrets.Data["in-updates"] = []byte("orig")
+	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
+		t.Parallel()
 
-	update := v1.Secret{Data: map[string][]byte{}}
-	update.Data["not-in-secrets"] = []byte("value1")
-	update.Data["in-updates"] = []byte("changed")
+		// If `name` is in updates but not secrets, the dirty flag should be set and the secret should be updated
+		secrets := v1.Secret{Data: map[string][]byte{}}
 
-	configVar := model.ConfigurationVariable{}
+		update := v1.Secret{Data: map[string][]byte{}}
+		update.Data["not-in-secrets"] = []byte("value1")
 
-	// If `name` is in updates but not secrets, the dirty flag should be set and the secret should be updated
-	configVar.Name = "NOT_IN_SECRETS"
-	result := updateVariable(&secrets, &update, &configVar)
-	assert.True(result)
-	assert.Equal(string(secrets.Data["not-in-secrets"]), "value1")
+		configVar := model.ConfigurationVariable{Name: "NOT_IN_SECRETS"}
+		result := updateVariable(&secrets, &update, &configVar)
+		assert.True(result)
+		assert.Equal(string(secrets.Data["not-in-secrets"]), "value1")
+	})
 
-	// If `name` isn't in updates, don't do anything
-	configVar.Name = "NOT_IN_UPDATES"
-	result = updateVariable(&secrets, &update, &configVar)
-	assert.False(result)
-	assert.Equal(string(secrets.Data["not-in-updates"]), "value2")
+	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
+		t.Parallel()
 
-	// If `name` is in secrets, don't do anything
-	configVar.Name = "IN_UPDATES"
-	result = updateVariable(&secrets, &update, &configVar)
-	assert.False(result)
-	assert.Equal(string(secrets.Data["in-updates"]), "orig")
+		// If `name` isn't in updates, don't do anything
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		secrets.Data["not-in-updates"] = []byte("value2")
+
+		update := v1.Secret{Data: map[string][]byte{}}
+
+		configVar := model.ConfigurationVariable{Name: "NOT_IN_UPDATES"}
+		result := updateVariable(&secrets, &update, &configVar)
+		assert.False(result)
+		assert.Equal(string(secrets.Data["not-in-updates"]), "value2")
+	})
+
+	t.Run("NameInUpdatesAndSecrets", func(t *testing.T) {
+		t.Parallel()
+
+		// If `name` is in secrets, don't do anything
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		secrets.Data["in-updates"] = []byte("orig")
+
+		update := v1.Secret{Data: map[string][]byte{}}
+		update.Data["in-updates"] = []byte("changed")
+
+		configVar := model.ConfigurationVariable{Name: "IN_UPDATES"}
+		result := updateVariable(&secrets, &update, &configVar)
+		assert.False(result)
+		assert.Equal(string(secrets.Data["in-updates"]), "orig")
+	})
 }
