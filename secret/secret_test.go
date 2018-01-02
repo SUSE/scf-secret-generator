@@ -39,11 +39,6 @@ type MockSecretInterfaceUnknown struct {
 	MockSecretInterface
 }
 
-func (m *MockBase) ClearCalls() {
-	m.Calls = nil
-	m.ExpectedCalls = nil
-}
-
 func (m *MockSecretInterface) Create(secret *v1.Secret) (*v1.Secret, error) {
 	m.Called(secret)
 	return nil, nil
@@ -133,30 +128,45 @@ func (m *MockSecrets) GenerateSSLCerts(secrets, updates *v1.Secret) (dirty bool)
 func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 	t.Parallel()
 
-	var s MockSecretInterface
-	s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
-	s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
+	t.Run("Neither Create Nor Update called", func(t *testing.T) {
+		var s MockSecretInterface
+		s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
+		s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
 
-	UpdateSecrets(&s, nil, false, false)
-	s.AssertNotCalled(t, "Create", nil)
-	s.AssertNotCalled(t, "Update", nil)
+		UpdateSecrets(&s, nil, false, false)
+		s.AssertNotCalled(t, "Create", nil)
+		s.AssertNotCalled(t, "Update", nil)
+	})
 
-	s.Calls = []mock.Call{}
+	t.Run("Create, but don't update", func(t *testing.T) {
+		var s MockSecretInterface
+		s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
+		s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
 
-	UpdateSecrets(&s, nil, true, false)
-	s.AssertCalled(t, "Create", (*v1.Secret)(nil))
-	s.AssertNotCalled(t, "Update", nil)
-	s.Calls = []mock.Call{}
+		UpdateSecrets(&s, nil, true, false)
+		s.AssertCalled(t, "Create", (*v1.Secret)(nil))
+		s.AssertNotCalled(t, "Update", nil)
+	})
 
-	UpdateSecrets(&s, nil, true, true)
-	s.AssertCalled(t, "Create", (*v1.Secret)(nil))
-	s.AssertNotCalled(t, "Update", (*v1.Secret)(nil))
+	t.Run("Create and update called", func(t *testing.T) {
+		var s MockSecretInterface
+		s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
+		s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
 
-	s.Calls = []mock.Call{}
+		UpdateSecrets(&s, nil, true, true)
+		s.AssertCalled(t, "Create", (*v1.Secret)(nil))
+		s.AssertNotCalled(t, "Update", (*v1.Secret)(nil))
+	})
 
-	UpdateSecrets(&s, nil, false, true)
-	s.AssertNotCalled(t, "Create", (*v1.Secret)(nil))
-	s.AssertCalled(t, "Update", (*v1.Secret)(nil))
+	t.Run("Update, but don't create", func(t *testing.T) {
+		var s MockSecretInterface
+		s.On("Create", (*v1.Secret)(nil)).Return(nil, nil)
+		s.On("Update", (*v1.Secret)(nil)).Return(nil, nil)
+
+		UpdateSecrets(&s, nil, false, true)
+		s.AssertNotCalled(t, "Create", (*v1.Secret)(nil))
+		s.AssertCalled(t, "Update", (*v1.Secret)(nil))
+	})
 }
 
 func TestGetOrCreateWithValidSecrets(t *testing.T) {
@@ -174,77 +184,85 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		getEnv = origGetEnv
 	}()
 
-	var mockLog MockLog
-	logFatal = mockLog.Fatal
+	t.Run("Missing secret-updates should logFatal", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
 
-	// Missing secret-updates
-	//   should logFatal
-	var s MockSecretInterface
-	getEnv = func(string) string {
-		return "missing"
-	}
-	mockLog.On("Fatal", []interface{}{errors.New("missing")})
-	s.On("Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
-	s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		getEnv = func(string) string {
+			return "missing"
+		}
+		mockLog.On("Fatal", []interface{}{errors.New("missing")})
+		s.On("Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
 
-	_, _, _ = GetOrCreateSecrets(&s)
+		_, _, _ = GetOrCreateSecrets(&s)
 
-	mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("missing")})
-	s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
-	s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-	// secret-updates with revision
-	//   should append revision to secret requested
-	getEnv = func(string) string {
-		return "1234"
-	}
-	s.ClearCalls()
-	mockLog.ClearCalls()
-	s.On("Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
-	s.On("Get", SECRET_NAME, metav1.GetOptions{})
-	_, _, _ = GetOrCreateSecrets(&s)
-	s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
+		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("missing")})
+		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
+		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+	})
 
-	// Valid secret-updates
-	//   should call get with SECRET_NAME
-	//   should return that secret
-	getEnv = func(string) string {
-		return ""
-	}
-	s.ClearCalls()
-	mockLog.ClearCalls()
-	s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-	s.On("Get", SECRET_NAME, metav1.GetOptions{})
-	create, secrets, _ := GetOrCreateSecrets(&s)
-	s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-	assert.Equal(secrets.Data[SECRET_NAME], []byte(SECRET_NAME))
-	assert.False(create)
+	t.Run("secret-updates with revision should append revision to secret requested", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
 
-	// Missing secret
-	//   should return IsNotFound
-	//   should create a secret
-	var sMissing MockSecretInterfaceMissing
-	getEnv = func(string) string {
-		return ""
-	}
-	sMissing.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-	sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
-	create, secrets, updates := GetOrCreateSecrets(&sMissing)
-	assert.True(create)
-	assert.NotNil(secrets)
-	assert.NotNil(updates)
+		getEnv = func(string) string {
+			return "1234"
+		}
+		s.On("Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		_, _, _ = GetOrCreateSecrets(&s)
+		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
+	})
 
-	// Unrelated Get error for SECRET_NAME
-	//   should logFatal
-	var sUnknown MockSecretInterfaceUnknown
-	getEnv = func(string) string {
-		return ""
-	}
-	mockLog.ClearCalls()
-	mockLog.On("Fatal", []interface{}{errors.New("unknownerr")})
-	sUnknown.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-	sUnknown.On("Get", SECRET_NAME, metav1.GetOptions{})
-	create, secrets, updates = GetOrCreateSecrets(&sUnknown)
-	mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("unknownerr")})
+	t.Run("Valid secret-updates should call get with SECRET_NAME and return that secret", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			return ""
+		}
+		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		create, secrets, _ := GetOrCreateSecrets(&s)
+		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+		assert.Equal(secrets.Data[SECRET_NAME], []byte(SECRET_NAME))
+		assert.False(create)
+	})
+
+	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {
+		var sMissing MockSecretInterfaceMissing
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			return ""
+		}
+		sMissing.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
+		create, secrets, updates := GetOrCreateSecrets(&sMissing)
+		assert.True(create)
+		assert.NotNil(secrets)
+		assert.NotNil(updates)
+	})
+
+	t.Run("Unrelated Get error for SECRET_NAME should logFatal", func(t *testing.T) {
+		var sUnknown MockSecretInterfaceUnknown
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			return ""
+		}
+		mockLog.On("Fatal", []interface{}{errors.New("unknownerr")})
+		sUnknown.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		sUnknown.On("Get", SECRET_NAME, metav1.GetOptions{})
+		_, _, _ = GetOrCreateSecrets(&sUnknown)
+		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("unknownerr")})
+	})
 }
 
 func TestGenerateSecretsWithNoSecrets(t *testing.T) {
@@ -264,274 +282,300 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		generateSSLCerts = origGenerateSSLCerts
 	}()
 
-	var mockSecrets MockSecrets
+	t.Run("Manifest with no secrets doesn't change", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{Variables: []*model.ConfigurationVariable{}},
+		}
 
-	passGenerate = mockSecrets.PassGenerate
-	sshKeyGenerate = mockSecrets.SSHKeyGenerate
-	recordSSHKeyInfo = mockSecrets.RecordSSHKeyInfo
-	recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
-	generateSSLCerts = mockSecrets.GenerateSSLCerts
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		mockSecrets.On("GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil)).Return(false)
+		dirty := GenerateSecrets(manifest, nil, nil)
+		assert.False(dirty)
+		mockSecrets.AssertCalled(t, "GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil))
+	})
 
-	secrets := v1.Secret{Data: map[string][]byte{}}
-	updates := v1.Secret{Data: map[string][]byte{}}
-
-	//
-	// Test that a manifest with no secrets doesn't generate a change
-	//
-	manifest := model.Manifest{
-		Configuration: &model.Configuration{Variables: []*model.ConfigurationVariable{}},
-	}
-
-	mockSecrets.On("GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil)).Return(false)
-	dirty := GenerateSecrets(manifest, nil, nil)
-	assert.False(dirty)
-	mockSecrets.AssertCalled(t, "GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil))
-
-	//
-	// Test with a password that is updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "dirty",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypePassword,
+	t.Run("Passwords are updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "dirty",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypePassword,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty").Return(true)
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.True(dirty)
-	mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty")
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with a password that wouldn't be updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "clean",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypePassword,
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		passGenerate = mockSecrets.PassGenerate
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty").Return(true)
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.True(dirty)
+		mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty")
+	})
+
+	t.Run("Existing passwords aren't updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "clean",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypePassword,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean").Return(false)
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.False(dirty)
-	mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean")
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with a non-generated, non-updated secret
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "non-generated",
-					Secret: true,
-				},
-			},
-		},
-	}
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		passGenerate = mockSecrets.PassGenerate
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean").Return(false)
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.False(dirty)
+		mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean")
+	})
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.False(dirty)
-
-	//
-	// Test with a non-generated, updated secret
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "NON_GENERATED",
-					Secret: true,
-				},
-			},
-		},
-	}
-
-	updates.Data["non-generated"] = []byte("password")
-
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.True(dirty)
-	assert.Equal(secrets.Data["non-generated"], []byte("password"))
-
-	secrets = v1.Secret{Data: map[string][]byte{}}
-	updates = v1.Secret{Data: map[string][]byte{}}
-
-	//
-	// Test with an SSH key that is updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "dirty",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeSSH,
+	t.Run("Non-generated secrets aren't updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "non-generated",
+						Secret: true,
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
-	mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(true)
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.True(dirty)
-	mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
-	mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"dirty": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with an SSH key that is *not* updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "clean",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeSSH,
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.False(dirty)
+	})
+
+	t.Run("Non-generated updates are written to secrets", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "NON_GENERATED",
+						Secret: true,
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
-	mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(false)
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.False(dirty)
-	mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
-	mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"clean": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
+		updates.Data["non-generated"] = []byte("password")
 
-	//
-	// Test with an SSL CA cert that is updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "dirty",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeCACertificate,
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		mockSecrets.On("GenerateSSLCerts", &secrets, &secrets).Return(false)
+
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.True(dirty)
+		assert.Equal(secrets.Data["non-generated"], []byte("password"))
+	})
+
+	t.Run("An updated SSH key is generated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "dirty",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeSSH,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
-	mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.True(dirty)
-	mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with an SSL CA cert that is *not* updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "clean",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeCACertificate,
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		recordSSHKeyInfo = mockSecrets.RecordSSHKeyInfo
+		sshKeyGenerate = mockSecrets.SSHKeyGenerate
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
+		mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(true)
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.True(dirty)
+		mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
+		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"dirty": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+	})
+
+	t.Run("An SSH key that doesn't need to be generated isn't updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "clean",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeSSH,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.False(dirty)
-	mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with an SSL cert that is updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "dirty",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeCertificate,
+		var mockSecrets MockSecrets
+		recordSSHKeyInfo = mockSecrets.RecordSSHKeyInfo
+		sshKeyGenerate = mockSecrets.SSHKeyGenerate
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
+		mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(false)
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.False(dirty)
+		mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
+		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"clean": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+	})
+
+	t.Run("An SSL CA cert is updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "dirty",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeCACertificate,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
-	mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.True(dirty)
-	mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
 
-	//
-	// Test with an SSL cert that is *not* updated
-	//
-	manifest = model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "clean",
-					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						Type: model.GeneratorTypeCertificate,
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
+		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.True(dirty)
+		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+	})
+
+	t.Run("An SSL CA cert that isn't updated is unchanged", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "clean",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeCACertificate,
+						},
 					},
 				},
 			},
-		},
-	}
+		}
 
-	mockSecrets.ClearCalls()
-	mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
-	mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	dirty = GenerateSecrets(manifest, &secrets, &updates)
-	assert.False(dirty)
-	mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-	mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
+
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.False(dirty)
+		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+	})
+
+	t.Run("An SSL cert is updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "dirty",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeCertificate,
+						},
+					},
+				},
+			},
+		}
+
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
+
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
+		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.True(dirty)
+		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+	})
+
+	t.Run("An SSL cert that isn't updated is unchanged", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "clean",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypeCertificate,
+						},
+					},
+				},
+			},
+		}
+
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
+
+		var mockSecrets MockSecrets
+		generateSSLCerts = mockSecrets.GenerateSSLCerts
+		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
+		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
+		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		dirty := GenerateSecrets(manifest, &secrets, &updates)
+		assert.False(dirty)
+		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
+		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
+	})
 }
 
 func TestUpdateVariable(t *testing.T) {
