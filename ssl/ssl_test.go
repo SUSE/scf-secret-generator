@@ -33,18 +33,18 @@ type MockSSL struct {
 }
 
 func (m *MockSSL) createCA(secrets *v1.Secret, updates *v1.Secret, id string) bool {
-	args := m.Called(secrets, updates, id)
-	return args.Bool(0)
+	results := m.Called(secrets, updates, id)
+	return results.Bool(0)
 }
 
 func (m *MockSSL) createCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
-	args := m.Called(secrets, updates, id)
-	return args.Bool(0)
+	results := m.Called(secrets, updates, id)
+	return results.Bool(0)
 }
 
 func (m *MockSSL) updateCert(secrets *v1.Secret, updates *v1.Secret, id string) bool {
-	args := m.Called(secrets, updates, id)
-	return args.Bool(0)
+	results := m.Called(secrets, updates, id)
+	return results.Bool(0)
 }
 
 func (m *MockBase) ClearCalls() {
