@@ -552,7 +552,7 @@ func TestUpdateVariable(t *testing.T) {
 		assert.Equal(string(secrets.Data["not-in-secrets"]), "value1")
 	})
 
-	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
+	t.Run("NameNotInUpdates", func(t *testing.T) {
 		t.Parallel()
 
 		// If `name` isn't in updates, don't do anything
