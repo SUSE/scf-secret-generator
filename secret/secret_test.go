@@ -107,13 +107,13 @@ type MockSecrets struct {
 }
 
 func (m *MockSecrets) PassGenerate(secretData, updateData map[string][]byte, secretName string) bool {
-	args := m.Called(secretData, updateData, secretName)
-	return args.Bool(0)
+	results := m.Called(secretData, updateData, secretName)
+	return results.Bool(0)
 }
 
 func (m *MockSecrets) SSHKeyGenerate(secretData, updateData map[string][]byte, key ssh.SSHKey) bool {
-	args := m.Called(secretData, updateData, key)
-	return args.Bool(0)
+	results := m.Called(secretData, updateData, key)
+	return results.Bool(0)
 }
 
 func (m *MockSecrets) RecordSSHKeyInfo(keys map[string]ssh.SSHKey, configVar *model.ConfigurationVariable) {
@@ -126,8 +126,8 @@ func (m *MockSecrets) RecordSSLCertInfo(configVar *model.ConfigurationVariable) 
 }
 
 func (m *MockSecrets) GenerateSSLCerts(secrets, updates *v1.Secret) (dirty bool) {
-	args := m.Called(secrets, updates)
-	return args.Bool(0)
+	results := m.Called(secrets, updates)
+	return results.Bool(0)
 }
 
 func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
