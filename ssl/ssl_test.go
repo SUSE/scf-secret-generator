@@ -1,6 +1,7 @@
 package ssl
 
 import (
+	"crypto/tls"
 	"errors"
 	"strconv"
 	"testing"
@@ -463,6 +464,9 @@ func TestCreateCert(t *testing.T) {
 	assert.True(dirty)
 	assert.NotEqual(secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
 	assert.NotEqual(secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
+	_, err := tls.X509KeyPair(secrets.Data[certInfo[CERT_ID].CertificateName],
+		secrets.Data[certInfo[CERT_ID].PrivateKeyName])
+	assert.Nil(err)
 
 	//
 	// If the rolename isn't empty and the env can't be parsed
