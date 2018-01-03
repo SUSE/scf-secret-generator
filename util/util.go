@@ -10,9 +10,16 @@ import (
 
 var env map[string]string
 
+var osEnviron = os.Environ
+var logFatalf = log.Fatalf
+
 func init() {
+	setupEnv()
+}
+
+func setupEnv() {
 	env = make(map[string]string)
-	for _, e := range os.Environ() {
+	for _, e := range osEnviron() {
 		pair := strings.SplitN(e, "=", 2)
 		env[pair[0]] = pair[1]
 	}
@@ -25,7 +32,8 @@ func ConvertNameToKey(name string) string {
 func ExpandEnvTemplates(str string) string {
 	t, err := template.New("").Parse(str)
 	if err != nil {
-		log.Fatalf("Can't parse templates in '%s': %s", str, err)
+		logFatalf("Can't parse templates in '%s': %s", str, err)
+		return ""
 	}
 	buf := &bytes.Buffer{}
 	t.Execute(buf, env)

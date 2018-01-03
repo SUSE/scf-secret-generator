@@ -14,6 +14,8 @@ import (
 // GenerateSSHKey tests
 
 func TestNewKeyIsCreated(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 	secretData := make(map[string][]byte)
 	updateData := make(map[string][]byte)
@@ -36,6 +38,8 @@ func TestNewKeyIsCreated(t *testing.T) {
 }
 
 func TestExistingKeyIsNotChanged(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 
 	fooData := []byte("foo-data")
@@ -62,6 +66,8 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 // RecordSSHKeyInfo tests
 
 func TestRecordingFingerprintCreatesKey(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 
 	keys := make(map[string]SSHKey)
@@ -80,6 +86,8 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 }
 
 func TestRecordingPrivateCreatesKey(t *testing.T) {
+	t.Parallel()
+
 	assert := assert.New(t)
 
 	keys := make(map[string]SSHKey)
