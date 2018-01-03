@@ -170,11 +170,6 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 }
 
 func TestGetOrCreateWithValidSecrets(t *testing.T) {
-	t.Parallel()
-
-	//
-	// Set up mocked functions
-	//
 	assert := assert.New(t)
 
 	origLogFatal := logFatal
