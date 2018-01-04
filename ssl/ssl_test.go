@@ -2,8 +2,8 @@ package ssl
 
 import (
 	"crypto/tls"
-	"errors"
-	"strconv"
+	"crypto/x509"
+	"encoding/pem"
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
@@ -557,33 +557,6 @@ func TestCreateCert(t *testing.T) {
 
 	})
 
-	t.Run("rolename isn't empty and the env can't be parsed, logFatalf", func(t *testing.T) {
-		var mockLog MockLog
-		logFatalf = mockLog.Fatalf
-
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
-		secrets := v1.Secret{Data: map[string][]byte{}}
-		updates := v1.Secret{Data: map[string][]byte{}}
-		certInfo[CERT_ID] = CertInfo{
-			PrivateKeyName:  "private-key",
-			CertificateName: "certificate-name",
-			SubjectNames:    []string{"subject-names"},
-			RoleName:        "role-name",
-		}
-		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(false)
-		mockLog.On("Fatalf",
-			"Cannot parse %s value '%s': %s",
-			[]interface{}{"KUBE_SIZING_ROLE_NAME_COUNT", "", &strconv.NumError{Func: "ParseInt",
-				Num: "", Err: errors.New("invalid syntax")}})
-		_ = createCertImpl(&secrets, &updates, CERT_ID)
-		mockLog.AssertCalled(t, "Fatalf",
-			"Cannot parse %s value '%s': %s",
-			[]interface{}{"KUBE_SIZING_ROLE_NAME_COUNT", "", &strconv.NumError{Func: "ParseInt",
-				Num: "", Err: errors.New("invalid syntax")}})
-	})
-
 	t.Run("rolename isn't empty and the env is valid, cert should be updated", func(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
@@ -598,15 +571,34 @@ func TestCreateCert(t *testing.T) {
 		getEnv = func(string) string {
 			return "2"
 		}
-
 		secrets := v1.Secret{Data: map[string][]byte{}}
 		updates := v1.Secret{Data: map[string][]byte{}}
 
+		certInfo[DEFAULT_CA] = defaultCA
+		certInfo[CERT_ID] = CertInfo{
+			PrivateKeyName:  "private-key",
+			CertificateName: "certificate-name",
+			SubjectNames:    []string{},
+			RoleName:        "dummy-role",
+		}
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty := createCertImpl(&secrets, &updates, CERT_ID)
 		assert.True(dirty)
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
+		assert.NotEmpty(secrets.Data[certInfo[CERT_ID].PrivateKeyName])
+		assert.NotEmpty(secrets.Data[certInfo[CERT_ID].CertificateName])
+
+		certBlob, _ := pem.Decode(secrets.Data[certInfo[CERT_ID].CertificateName])
+		if !assert.NotNil(certBlob, "Failed to decode certificate PEM block") {
+			return
+		}
+		cert, err := x509.ParseCertificate(certBlob.Bytes)
+		if assert.NoError(err) {
+			assert.Contains(cert.DNSNames, "dummy-role.<no value>.svc.cluster.local")
+			assert.Contains(cert.DNSNames, "*.dummy-role-set.<no value>.svc.cluster.local")
+			assert.Contains(cert.DNSNames, "dummy-role.<no value>")
+			assert.NotContains(cert.DNSNames, "dummy-role-set")
+			assert.NotContains(cert.DNSNames, "*.*.dummy-role-set")
+		}
 	})
 }
 

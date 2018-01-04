@@ -3,8 +3,6 @@ package ssl
 import (
 	"fmt"
 	"os"
-	"strconv"
-	"strings"
 	"time"
 
 	"github.com/SUSE/scf-secret-generator/model"
@@ -140,25 +138,18 @@ func createCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	req := csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
 
 	if info.RoleName != "" {
-		// get role instance count from environment
-		envName := fmt.Sprintf("KUBE_SIZING_%s_COUNT", strings.Replace(strings.ToUpper(info.RoleName), "-", "_", -1))
-		envVal := getEnv(envName)
-		count, err := strconv.ParseInt(envVal, 10, 0)
-		if err != nil {
-			logFatalf("Cannot parse %s value '%s': %s", envName, envVal, err)
-			return false
-		}
-
 		addHost(&req, true, info.RoleName)
 		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc")
 		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
 
-		for i := 0; i < int(count); i++ {
-			subdomain := fmt.Sprintf("%s-%d.%s-set", info.RoleName, i, info.RoleName)
-			addHost(&req, false, subdomain)
-			addHost(&req, false, subdomain+".{{.KUBERNETES_NAMESPACE}}.svc")
-			addHost(&req, false, subdomain+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
-		}
+		// Generate wildcard certs for stateful sets for self-clustering roles
+		// We do this instead of having a bunch of subject alt names so that the
+		// certs can work correctly if we scale the cluster post-deployment.
+		prefix := fmt.Sprintf("*.%s-set", info.RoleName)
+		addHost(&req, false, prefix)
+		addHost(&req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc")
+		addHost(&req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
+
 		addHost(&req, true, info.RoleName+".{{.KUBE_SERVICE_DOMAIN_SUFFIX}}")
 	}
 
