@@ -154,10 +154,10 @@ func TestGenerateCerts(t *testing.T) {
 		createCA = mockSSL.createCA
 
 		//
-		// If no subjectnames and the rolename is blank, call createCA
+		// Call createCA for CA certificates
 		//
 		certInfo = make(map[string]CertInfo)
-		certInfo[CERT_ID] = CertInfo{}
+		certInfo[CERT_ID] = CertInfo{IsAuthority: true}
 		secrets := v1.Secret{Data: map[string][]byte{}}
 		updates := v1.Secret{Data: map[string][]byte{}}
 
@@ -247,6 +247,36 @@ func TestGenerateCerts(t *testing.T) {
 		certInfo[CERT_ID] = CertInfo{
 			RoleName:     "rolename",
 			SubjectNames: []string{"subject"},
+		}
+		secrets := v1.Secret{Data: map[string][]byte{}}
+		updates := v1.Secret{Data: map[string][]byte{}}
+
+		// When createCert returns true
+		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(true)
+		dirty := GenerateCerts(&secrets, &updates)
+		assert.True(dirty)
+		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
+
+		// When createCert returns false
+		mockSSL.ExpectedCalls = nil
+		mockSSL.Calls = nil
+		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(false)
+		dirty = GenerateCerts(&secrets, &updates)
+		assert.False(dirty)
+		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
+	})
+
+	t.Run("Check createCert is called properly when neither SubjectNames nor RoleNames specified", func(t *testing.T) {
+		var mockSSL MockSSL
+		createCert = mockSSL.createCert
+
+		//
+		// If subjectnames == 0 and rolename is blank, call createCert
+		//
+		certInfo = make(map[string]CertInfo)
+		certInfo[CERT_ID] = CertInfo{
+			RoleName:     "",
+			SubjectNames: []string{},
 		}
 		secrets := v1.Secret{Data: map[string][]byte{}}
 		updates := v1.Secret{Data: map[string][]byte{}}

@@ -30,6 +30,7 @@ const DEFAULT_CA = "cacert"
 type CertInfo struct {
 	PrivateKeyName  string // Name to associate with private key
 	CertificateName string // Name to associate with certificate
+	IsAuthority     bool
 
 	SubjectNames []string
 	RoleName     string
@@ -48,6 +49,7 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	} else if configVar.Generator.ValueType == model.ValueTypePrivateKey {
 		info.PrivateKeyName = util.ConvertNameToKey(configVar.Name)
 	}
+	info.IsAuthority = (configVar.Generator.Type == model.GeneratorTypeCACertificate)
 
 	if len(configVar.Generator.SubjectNames) > 0 {
 		info.SubjectNames = configVar.Generator.SubjectNames
@@ -61,14 +63,18 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 func GenerateCerts(secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
-		if len(info.SubjectNames) == 0 && info.RoleName == "" {
+		if info.IsAuthority {
 			dirty = createCA(secrets, updates, id) || dirty
 		}
 	}
 	for id, info := range certInfo {
-		if len(info.SubjectNames) > 0 || info.RoleName != "" {
-			dirty = createCert(secrets, updates, id) || dirty
+		if info.IsAuthority {
+			continue
 		}
+		if len(info.SubjectNames) == 0 && info.RoleName == "" {
+			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
+		}
+		dirty = createCert(secrets, updates, id) || dirty
 	}
 	return
 }
@@ -157,6 +163,9 @@ func createCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		addHost(&req, false, name)
 	}
 
+	if len(req.Hosts) == 0 {
+		req.Hosts = append(req.Hosts, info.CertificateName)
+	}
 	req.CN = req.Hosts[0]
 
 	var signingReq []byte
