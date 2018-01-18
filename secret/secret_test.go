@@ -224,7 +224,7 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		s.On("Get", SECRET_NAME, metav1.GetOptions{})
 		create, secrets, _ := GetOrCreateSecrets(&s)
 		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		assert.Equal(secrets.Data[SECRET_NAME], []byte(SECRET_NAME))
+		assert.Equal([]byte(SECRET_NAME), secrets.Data[SECRET_NAME])
 		assert.False(create)
 	})
 
@@ -391,7 +391,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
 		assert.True(dirty)
-		assert.Equal(secrets.Data["non-generated"], []byte("password"))
+		assert.Equal([]byte("password"), secrets.Data["non-generated"])
 	})
 
 	t.Run("An updated SSH key is generated", func(t *testing.T) {
@@ -588,7 +588,7 @@ func TestUpdateVariable(t *testing.T) {
 		configVar := model.ConfigurationVariable{Name: "NOT_IN_SECRETS"}
 		result := updateVariable(&secrets, &update, &configVar)
 		assert.True(result)
-		assert.Equal(string(secrets.Data["not-in-secrets"]), "value1")
+		assert.Equal("value1", string(secrets.Data["not-in-secrets"]))
 	})
 
 	t.Run("NameNotInUpdates", func(t *testing.T) {
@@ -603,7 +603,7 @@ func TestUpdateVariable(t *testing.T) {
 		configVar := model.ConfigurationVariable{Name: "NOT_IN_UPDATES"}
 		result := updateVariable(&secrets, &update, &configVar)
 		assert.False(result)
-		assert.Equal(string(secrets.Data["not-in-updates"]), "value2")
+		assert.Equal("value2", string(secrets.Data["not-in-updates"]))
 	})
 
 	t.Run("NameInUpdatesAndSecrets", func(t *testing.T) {
@@ -619,7 +619,7 @@ func TestUpdateVariable(t *testing.T) {
 		configVar := model.ConfigurationVariable{Name: "IN_UPDATES"}
 		result := updateVariable(&secrets, &update, &configVar)
 		assert.False(result)
-		assert.Equal(string(secrets.Data["in-updates"]), "orig")
+		assert.Equal("orig", string(secrets.Data["in-updates"]))
 	})
 }
 

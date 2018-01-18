@@ -34,7 +34,7 @@ func TestNewKeyIsCreated(t *testing.T) {
 
 	// 16 colon separated bytes = 47
 	// 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff
-	assert.Equal(len(secretData["bar"]), 47)
+	assert.Equal(47, len(secretData["bar"]))
 }
 
 func TestExistingKeyIsNotChanged(t *testing.T) {
@@ -59,8 +59,8 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 
 	result := GenerateSSHKey(secretData, updateData, key)
 	assert.False(result)
-	assert.Equal(secretData["foo"], fooData)
-	assert.Equal(secretData["bar"], barData)
+	assert.Equal(fooData, secretData["foo"])
+	assert.Equal(barData, secretData["bar"])
 }
 
 // RecordSSHKeyInfo tests
@@ -82,7 +82,7 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 
 	RecordSSHKeyInfo(keys, &configVar)
 
-	assert.Equal(keys["foo"].Fingerprint, "FINGERPRINT_NAME")
+	assert.Equal("FINGERPRINT_NAME", keys["foo"].Fingerprint)
 }
 
 func TestRecordingPrivateCreatesKey(t *testing.T) {
@@ -102,5 +102,5 @@ func TestRecordingPrivateCreatesKey(t *testing.T) {
 
 	RecordSSHKeyInfo(keys, &configVar)
 
-	assert.Equal(keys["foo"].PrivateKey, "PRIVATE_KEY_NAME")
+	assert.Equal("PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
 }

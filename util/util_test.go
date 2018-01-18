@@ -25,7 +25,7 @@ func TestConvertNameToKey(t *testing.T) {
 
 	output := ConvertNameToKey(input)
 
-	assert.Equal(output, "app-passphrase")
+	assert.Equal("app-passphrase", output)
 }
 
 func TestSetupEnv(t *testing.T) {
@@ -39,7 +39,7 @@ func TestSetupEnv(t *testing.T) {
 
 	setupEnv()
 
-	assert.Equal(env["FOO"], "BAR")
+	assert.Equal("BAR", env["FOO"])
 }
 
 func TestExpandEnvTemplates(t *testing.T) {
@@ -51,7 +51,7 @@ func TestExpandEnvTemplates(t *testing.T) {
 	t.Run("VariableReplacementShouldWork", func(t *testing.T) {
 		t.Parallel()
 		env["FOO"] = "BAR"
-		assert.Equal(ExpandEnvTemplates("a {{.FOO}} variable"), "a BAR variable")
+		assert.Equal("a BAR variable", ExpandEnvTemplates("a {{.FOO}} variable"))
 	})
 
 	//

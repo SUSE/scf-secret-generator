@@ -62,7 +62,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal(certInfo[CERT_ID].CertificateName, "cert-name")
+		assert.Equal("cert-name", certInfo[CERT_ID].CertificateName)
 	})
 
 	t.Run("Private key should be added to certInfo", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal(certInfo[CERT_ID].PrivateKeyName, "private-key-name")
+		assert.Equal("private-key-name", certInfo[CERT_ID].PrivateKeyName)
 	})
 
 	t.Run("Private key and cert should be in the same mapped value", func(t *testing.T) {
@@ -101,8 +101,8 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal(certInfo[CERT_ID].CertificateName, "cert-name")
-		assert.Equal(certInfo[CERT_ID].PrivateKeyName, "private-key-name")
+		assert.Equal("cert-name", certInfo[CERT_ID].CertificateName)
+		assert.Equal("private-key-name", certInfo[CERT_ID].PrivateKeyName)
 	})
 
 	t.Run("SubjectNames are added to certInfo", func(t *testing.T) {
@@ -118,7 +118,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal(certInfo[CERT_ID].SubjectNames[0], "subject names")
+		assert.Equal("subject names", certInfo[CERT_ID].SubjectNames[0])
 	})
 
 	t.Run("Rolename is added to certInfo", func(t *testing.T) {
@@ -134,7 +134,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal(certInfo[CERT_ID].RoleName, "role name")
+		assert.Equal("role name", certInfo[CERT_ID].RoleName)
 	})
 }
 
@@ -302,7 +302,7 @@ func TestRsaKeyRequest(t *testing.T) {
 
 	assert := assert.New(t)
 	kr := rsaKeyRequest()
-	assert.Equal(kr.S, 4096)
+	assert.Equal(4096, kr.S)
 }
 
 func TestCreateCA(t *testing.T) {
@@ -336,8 +336,8 @@ func TestCreateCA(t *testing.T) {
 		dirty := createCAImpl(&secrets, &updates, CERT_ID)
 
 		assert.False(dirty)
-		assert.Equal(certInfo[CERT_ID].PrivateKey, []byte("private-key-data"))
-		assert.Equal(certInfo[CERT_ID].Certificate, []byte("certificate-data"))
+		assert.Equal([]byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
+		assert.Equal([]byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
 
 	t.Run("createCA should trigger an update if updateCert returns true", func(t *testing.T) {
@@ -383,16 +383,16 @@ func TestAddHost(t *testing.T) {
 	t.Run("Only host is added when wildcard is false", func(t *testing.T) {
 		req := csr.CertificateRequest{}
 		addHost(&req, false, "name")
-		assert.Equal(req.Hosts[0], "name")
-		assert.Equal(len(req.Hosts), 1)
+		assert.Equal("name", req.Hosts[0])
+		assert.Equal(1, len(req.Hosts))
 	})
 
 	t.Run("Wildcard entry is added when wildcard is false", func(t *testing.T) {
 		req := csr.CertificateRequest{}
 		addHost(&req, true, "name")
-		assert.Equal(req.Hosts[0], "name")
-		assert.Equal(req.Hosts[1], "*.name")
-		assert.Equal(len(req.Hosts), 2)
+		assert.Equal("name", req.Hosts[0])
+		assert.Equal("*.name", req.Hosts[1])
+		assert.Equal(2, len(req.Hosts))
 	})
 }
 
@@ -658,8 +658,8 @@ func TestUpdateCert(t *testing.T) {
 		result := updateCertImpl(&secrets, &updates, CERT_ID)
 
 		assert.True(result)
-		assert.Equal(certInfo[CERT_ID].PrivateKey, []byte("private-key-data"))
-		assert.Equal(certInfo[CERT_ID].Certificate, []byte("certificate-data"))
+		assert.Equal([]byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
+		assert.Equal([]byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
 
 	t.Run("If updates.Data has a PrivateKeyName but doesn't have a cert name, logFatal", func(t *testing.T) {
