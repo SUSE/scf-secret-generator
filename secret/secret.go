@@ -115,6 +115,7 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Se
 	// go over the list of variables and run the appropriate generator function
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Secret {
+			dirty = migrateRenamedVariable(secrets, configVar) || dirty
 			if configVar.Generator == nil {
 				dirty = updateVariable(secrets, updates, configVar) || dirty
 			} else {
@@ -146,6 +147,21 @@ func updateVariable(secrets *v1.Secret, updates *v1.Secret, configVar *model.Con
 	if len(secrets.Data[name]) == 0 && len(updates.Data[name]) > 0 {
 		secrets.Data[name] = updates.Data[name]
 		dirty = true
+	}
+	return
+}
+
+func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) (dirty bool) {
+	name := util.ConvertNameToKey(configVar.Name)
+	if len(secrets.Data[name]) == 0 {
+		for _, previousName := range configVar.PreviousNames {
+			previousValue := secrets.Data[util.ConvertNameToKey(previousName)]
+			if len(previousValue) > 0 {
+				secrets.Data[name] = previousValue
+				dirty = true
+				return
+			}
+		}
 	}
 	return
 }
