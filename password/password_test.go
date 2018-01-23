@@ -15,7 +15,7 @@ func TestNewPasswordIsCreated(t *testing.T) {
 	result := GeneratePassword(secretData, updateData, "foo")
 
 	assert.True(result)
-	assert.Equal(64, len(secretData["foo"]))
+	assert.Len(secretData["foo"], 64)
 }
 
 func TestExistingPasswordIsNotChanged(t *testing.T) {

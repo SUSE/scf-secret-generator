@@ -384,7 +384,7 @@ func TestAddHost(t *testing.T) {
 		req := csr.CertificateRequest{}
 		addHost(&req, false, "name")
 		assert.Equal("name", req.Hosts[0])
-		assert.Equal(1, len(req.Hosts))
+		assert.Len(req.Hosts, 1)
 	})
 
 	t.Run("Wildcard entry is added when wildcard is false", func(t *testing.T) {
@@ -392,7 +392,7 @@ func TestAddHost(t *testing.T) {
 		addHost(&req, true, "name")
 		assert.Equal("name", req.Hosts[0])
 		assert.Equal("*.name", req.Hosts[1])
-		assert.Equal(2, len(req.Hosts))
+		assert.Len(req.Hosts, 2)
 	})
 }
 

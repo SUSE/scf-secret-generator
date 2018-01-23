@@ -34,7 +34,7 @@ func TestNewKeyIsCreated(t *testing.T) {
 
 	// 16 colon separated bytes = 47
 	// 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff
-	assert.Equal(47, len(secretData["bar"]))
+	assert.Len(secretData["bar"], 47)
 }
 
 func TestExistingKeyIsNotChanged(t *testing.T) {
