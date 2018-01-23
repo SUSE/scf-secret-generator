@@ -16,7 +16,6 @@ import (
 func TestNewKeyIsCreated(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
 	secretData := make(map[string][]byte)
 	updateData := make(map[string][]byte)
 
@@ -27,20 +26,18 @@ func TestNewKeyIsCreated(t *testing.T) {
 
 	result := GenerateSSHKey(secretData, updateData, key)
 
-	assert.True(result)
+	assert.True(t, result)
 
-	assert.Contains(string(secretData["foo"]), "BEGIN RSA PRIVATE KEY")
-	assert.Contains(string(secretData["foo"]), "END RSA PRIVATE KEY")
+	assert.Contains(t, string(secretData["foo"]), "BEGIN RSA PRIVATE KEY")
+	assert.Contains(t, string(secretData["foo"]), "END RSA PRIVATE KEY")
 
 	// 16 colon separated bytes = 47
 	// 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff
-	assert.Len(secretData["bar"], 47)
+	assert.Len(t, secretData["bar"], 47)
 }
 
 func TestExistingKeyIsNotChanged(t *testing.T) {
 	t.Parallel()
-
-	assert := assert.New(t)
 
 	fooData := []byte("foo-data")
 	barData := []byte("bar-data")
@@ -58,17 +55,15 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 	}
 
 	result := GenerateSSHKey(secretData, updateData, key)
-	assert.False(result)
-	assert.Equal(fooData, secretData["foo"])
-	assert.Equal(barData, secretData["bar"])
+	assert.False(t, result)
+	assert.Equal(t, fooData, secretData["foo"])
+	assert.Equal(t, barData, secretData["bar"])
 }
 
 // RecordSSHKeyInfo tests
 
 func TestRecordingFingerprintCreatesKey(t *testing.T) {
 	t.Parallel()
-
-	assert := assert.New(t)
 
 	keys := make(map[string]SSHKey)
 
@@ -82,13 +77,11 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 
 	RecordSSHKeyInfo(keys, &configVar)
 
-	assert.Equal("FINGERPRINT_NAME", keys["foo"].Fingerprint)
+	assert.Equal(t, "FINGERPRINT_NAME", keys["foo"].Fingerprint)
 }
 
 func TestRecordingPrivateCreatesKey(t *testing.T) {
 	t.Parallel()
-
-	assert := assert.New(t)
 
 	keys := make(map[string]SSHKey)
 
@@ -102,5 +95,5 @@ func TestRecordingPrivateCreatesKey(t *testing.T) {
 
 	RecordSSHKeyInfo(keys, &configVar)
 
-	assert.Equal("PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
+	assert.Equal(t, "PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
 }

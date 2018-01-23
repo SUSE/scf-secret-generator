@@ -7,20 +7,16 @@ import (
 )
 
 func TestNewPasswordIsCreated(t *testing.T) {
-	assert := assert.New(t)
-
 	secretData := make(map[string][]byte)
 	updateData := make(map[string][]byte)
 
 	result := GeneratePassword(secretData, updateData, "foo")
 
-	assert.True(result)
-	assert.Len(secretData["foo"], 64)
+	assert.True(t, result)
+	assert.Len(t, secretData["foo"], 64)
 }
 
 func TestExistingPasswordIsNotChanged(t *testing.T) {
-	assert := assert.New(t)
-
 	data := []byte("bar")
 
 	secretData := make(map[string][]byte)
@@ -29,6 +25,6 @@ func TestExistingPasswordIsNotChanged(t *testing.T) {
 	secretData["foo"] = data
 
 	result := GeneratePassword(secretData, updateData, "foo")
-	assert.False(result)
-	assert.Equal(data, secretData["foo"])
+	assert.False(t, result)
+	assert.Equal(t, data, secretData["foo"])
 }

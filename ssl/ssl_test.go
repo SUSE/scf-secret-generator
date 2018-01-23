@@ -48,8 +48,6 @@ func (m *MockSSL) updateCert(secrets *v1.Secret, updates *v1.Secret, id string) 
 }
 
 func TestRecordCertInfo(t *testing.T) {
-	assert := assert.New(t)
-
 	t.Run("Certificate should be added to certInfo", func(t *testing.T) {
 		certInfo = make(map[string]CertInfo)
 
@@ -62,7 +60,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal("cert-name", certInfo[CERT_ID].CertificateName)
+		assert.Equal(t, "cert-name", certInfo[CERT_ID].CertificateName)
 	})
 
 	t.Run("Private key should be added to certInfo", func(t *testing.T) {
@@ -77,7 +75,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal("private-key-name", certInfo[CERT_ID].PrivateKeyName)
+		assert.Equal(t, "private-key-name", certInfo[CERT_ID].PrivateKeyName)
 	})
 
 	t.Run("Private key and cert should be in the same mapped value", func(t *testing.T) {
@@ -101,8 +99,8 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal("cert-name", certInfo[CERT_ID].CertificateName)
-		assert.Equal("private-key-name", certInfo[CERT_ID].PrivateKeyName)
+		assert.Equal(t, "cert-name", certInfo[CERT_ID].CertificateName)
+		assert.Equal(t, "private-key-name", certInfo[CERT_ID].PrivateKeyName)
 	})
 
 	t.Run("SubjectNames are added to certInfo", func(t *testing.T) {
@@ -118,7 +116,7 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal("subject names", certInfo[CERT_ID].SubjectNames[0])
+		assert.Equal(t, "subject names", certInfo[CERT_ID].SubjectNames[0])
 	})
 
 	t.Run("Rolename is added to certInfo", func(t *testing.T) {
@@ -134,13 +132,11 @@ func TestRecordCertInfo(t *testing.T) {
 			},
 		}
 		RecordCertInfo(&configVar)
-		assert.Equal("role name", certInfo[CERT_ID].RoleName)
+		assert.Equal(t, "role name", certInfo[CERT_ID].RoleName)
 	})
 }
 
 func TestGenerateCerts(t *testing.T) {
-	assert := assert.New(t)
-
 	origCreateCA := createCA
 	origCreateCert := createCert
 
@@ -164,7 +160,7 @@ func TestGenerateCerts(t *testing.T) {
 		// When createCA returns true
 		mockSSL.On("createCA", &secrets, &updates, CERT_ID).Return(true)
 		dirty := GenerateCerts(&secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "createCA", &secrets, &updates, CERT_ID)
 
 		// When createCA returns false
@@ -172,7 +168,7 @@ func TestGenerateCerts(t *testing.T) {
 		mockSSL.Calls = nil
 		mockSSL.On("createCA", &secrets, &updates, CERT_ID).Return(false)
 		dirty = GenerateCerts(&secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSSL.AssertCalled(t, "createCA", &secrets, &updates, CERT_ID)
 	})
 
@@ -193,7 +189,7 @@ func TestGenerateCerts(t *testing.T) {
 		// When createCert returns true
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := GenerateCerts(&secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 		// When createCert returns false
@@ -201,7 +197,7 @@ func TestGenerateCerts(t *testing.T) {
 		mockSSL.Calls = nil
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty = GenerateCerts(&secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 	})
@@ -223,7 +219,7 @@ func TestGenerateCerts(t *testing.T) {
 		// When createCert returns true
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := GenerateCerts(&secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 		// When createCert returns false
@@ -231,7 +227,7 @@ func TestGenerateCerts(t *testing.T) {
 		mockSSL.Calls = nil
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty = GenerateCerts(&secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 	})
@@ -254,7 +250,7 @@ func TestGenerateCerts(t *testing.T) {
 		// When createCert returns true
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := GenerateCerts(&secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 		// When createCert returns false
@@ -262,7 +258,7 @@ func TestGenerateCerts(t *testing.T) {
 		mockSSL.Calls = nil
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty = GenerateCerts(&secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 	})
 
@@ -284,7 +280,7 @@ func TestGenerateCerts(t *testing.T) {
 		// When createCert returns true
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := GenerateCerts(&secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 
 		// When createCert returns false
@@ -292,7 +288,7 @@ func TestGenerateCerts(t *testing.T) {
 		mockSSL.Calls = nil
 		mockSSL.On("createCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty = GenerateCerts(&secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSSL.AssertCalled(t, "createCert", &secrets, &updates, CERT_ID)
 	})
 }
@@ -300,14 +296,11 @@ func TestGenerateCerts(t *testing.T) {
 func TestRsaKeyRequest(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
 	kr := rsaKeyRequest()
-	assert.Equal(4096, kr.S)
+	assert.Equal(t, 4096, kr.S)
 }
 
 func TestCreateCA(t *testing.T) {
-	assert := assert.New(t)
-
 	origUpdateCert := updateCert
 
 	defer func() {
@@ -335,9 +328,9 @@ func TestCreateCA(t *testing.T) {
 
 		dirty := createCAImpl(&secrets, &updates, CERT_ID)
 
-		assert.False(dirty)
-		assert.Equal([]byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
-		assert.Equal([]byte("certificate-data"), certInfo[CERT_ID].Certificate)
+		assert.False(t, dirty)
+		assert.Equal(t, []byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
+		assert.Equal(t, []byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
 
 	t.Run("createCA should trigger an update if updateCert returns true", func(t *testing.T) {
@@ -352,7 +345,7 @@ func TestCreateCA(t *testing.T) {
 		certInfo = make(map[string]CertInfo)
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := createCAImpl(&secrets, &updates, CERT_ID)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "updateCert", &secrets, &updates, CERT_ID)
 	})
 
@@ -369,36 +362,32 @@ func TestCreateCA(t *testing.T) {
 
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty := createCAImpl(&secrets, &updates, CERT_ID)
-		assert.True(dirty)
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
+		assert.True(t, dirty)
+		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
+		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 	})
 }
 
 func TestAddHost(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	t.Run("Only host is added when wildcard is false", func(t *testing.T) {
 		req := csr.CertificateRequest{}
 		addHost(&req, false, "name")
-		assert.Equal("name", req.Hosts[0])
-		assert.Len(req.Hosts, 1)
+		assert.Equal(t, "name", req.Hosts[0])
+		assert.Len(t, req.Hosts, 1)
 	})
 
 	t.Run("Wildcard entry is added when wildcard is false", func(t *testing.T) {
 		req := csr.CertificateRequest{}
 		addHost(&req, true, "name")
-		assert.Equal("name", req.Hosts[0])
-		assert.Equal("*.name", req.Hosts[1])
-		assert.Len(req.Hosts, 2)
+		assert.Equal(t, "name", req.Hosts[0])
+		assert.Equal(t, "*.name", req.Hosts[1])
+		assert.Len(t, req.Hosts, 2)
 	})
 }
 
 func TestCreateCert(t *testing.T) {
-	assert := assert.New(t)
-
 	// Initialize a default CA for later use in this test
 	secrets := v1.Secret{Data: map[string][]byte{}}
 	updates := v1.Secret{Data: map[string][]byte{}}
@@ -430,7 +419,7 @@ func TestCreateCert(t *testing.T) {
 			CertificateName: "certificate-name",
 		}
 		dirty := createCertImpl(&secrets, &updates, CERT_ID)
-		assert.False(dirty)
+		assert.False(t, dirty)
 	})
 
 	t.Run("If updateCert() is true, return true", func(t *testing.T) {
@@ -449,7 +438,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(true)
 		dirty := createCertImpl(&secrets, &updates, CERT_ID)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSSL.AssertCalled(t, "updateCert", &secrets, &updates, CERT_ID)
 
 	})
@@ -578,12 +567,12 @@ func TestCreateCert(t *testing.T) {
 		}
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty := createCertImpl(&secrets, &updates, CERT_ID)
-		assert.True(dirty)
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
-		assert.NotEqual(secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
+		assert.True(t, dirty)
+		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
+		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 		_, err := tls.X509KeyPair(secrets.Data[certInfo[CERT_ID].CertificateName],
 			secrets.Data[certInfo[CERT_ID].PrivateKeyName])
-		assert.NoError(err)
+		assert.NoError(t, err)
 
 	})
 
@@ -613,28 +602,26 @@ func TestCreateCert(t *testing.T) {
 		}
 		mockSSL.On("updateCert", &secrets, &updates, CERT_ID).Return(false)
 		dirty := createCertImpl(&secrets, &updates, CERT_ID)
-		assert.True(dirty)
-		assert.NotEmpty(secrets.Data[certInfo[CERT_ID].PrivateKeyName])
-		assert.NotEmpty(secrets.Data[certInfo[CERT_ID].CertificateName])
+		assert.True(t, dirty)
+		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName])
+		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].CertificateName])
 
 		certBlob, _ := pem.Decode(secrets.Data[certInfo[CERT_ID].CertificateName])
-		if !assert.NotNil(certBlob, "Failed to decode certificate PEM block") {
+		if !assert.NotNil(t, certBlob, "Failed to decode certificate PEM block") {
 			return
 		}
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
-		if assert.NoError(err) {
-			assert.Contains(cert.DNSNames, "dummy-role.<no value>.svc.cluster.local")
-			assert.Contains(cert.DNSNames, "*.dummy-role-set.<no value>.svc.cluster.local")
-			assert.Contains(cert.DNSNames, "dummy-role.<no value>")
-			assert.NotContains(cert.DNSNames, "dummy-role-set")
-			assert.NotContains(cert.DNSNames, "*.*.dummy-role-set")
+		if assert.NoError(t, err) {
+			assert.Contains(t, cert.DNSNames, "dummy-role.<no value>.svc.cluster.local")
+			assert.Contains(t, cert.DNSNames, "*.dummy-role-set.<no value>.svc.cluster.local")
+			assert.Contains(t, cert.DNSNames, "dummy-role.<no value>")
+			assert.NotContains(t, cert.DNSNames, "dummy-role-set")
+			assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
 		}
 	})
 }
 
 func TestUpdateCert(t *testing.T) {
-	assert := assert.New(t)
-
 	origLogFatalf := logFatalf
 	defer func() {
 		logFatalf = origLogFatalf
@@ -657,9 +644,9 @@ func TestUpdateCert(t *testing.T) {
 
 		result := updateCertImpl(&secrets, &updates, CERT_ID)
 
-		assert.True(result)
-		assert.Equal([]byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
-		assert.Equal([]byte("certificate-data"), certInfo[CERT_ID].Certificate)
+		assert.True(t, result)
+		assert.Equal(t, []byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
+		assert.Equal(t, []byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
 
 	t.Run("If updates.Data has a PrivateKeyName but doesn't have a cert name, logFatal", func(t *testing.T) {
@@ -704,6 +691,6 @@ func TestUpdateCert(t *testing.T) {
 		updates := v1.Secret{Data: map[string][]byte{}}
 		certInfo[CERT_ID] = CertInfo{}
 		result := updateCertImpl(&secrets, &updates, CERT_ID)
-		assert.False(result)
+		assert.False(t, result)
 	})
 }

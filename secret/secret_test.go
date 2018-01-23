@@ -170,8 +170,6 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 }
 
 func TestGetOrCreateWithValidSecrets(t *testing.T) {
-	assert := assert.New(t)
-
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 	defer func() {
@@ -224,8 +222,8 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		s.On("Get", SECRET_NAME, metav1.GetOptions{})
 		create, secrets, _ := GetOrCreateSecrets(&s)
 		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		assert.Equal([]byte(SECRET_NAME), secrets.Data[SECRET_NAME])
-		assert.False(create)
+		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME])
+		assert.False(t, create)
 	})
 
 	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {
@@ -239,9 +237,9 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		sMissing.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
 		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
 		create, secrets, updates := GetOrCreateSecrets(&sMissing)
-		assert.True(create)
-		assert.NotNil(secrets)
-		assert.NotNil(updates)
+		assert.True(t, create)
+		assert.NotNil(t, secrets)
+		assert.NotNil(t, updates)
 	})
 
 	t.Run("Unrelated Get error for SECRET_NAME should logFatal", func(t *testing.T) {
@@ -261,8 +259,6 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 }
 
 func TestGenerateSecretsWithNoSecrets(t *testing.T) {
-	assert := assert.New(t)
-
 	origPassGenerate := passGenerate
 	origSshKeyGenerate := sshKeyGenerate
 	origRecordSSHKeyInfo := recordSSHKeyInfo
@@ -286,7 +282,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		generateSSLCerts = mockSecrets.GenerateSSLCerts
 		mockSecrets.On("GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil)).Return(false)
 		dirty := GenerateSecrets(manifest, nil, nil)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSecrets.AssertCalled(t, "GenerateSSLCerts", (*v1.Secret)(nil), (*v1.Secret)(nil))
 	})
 
@@ -314,7 +310,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
 		mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty").Return(true)
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "dirty")
 	})
 
@@ -342,7 +338,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
 		mockSecrets.On("PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean").Return(false)
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSecrets.AssertCalled(t, "PassGenerate", map[string][]byte{}, map[string][]byte{}, "clean")
 	})
 
@@ -366,7 +362,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
 
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 	})
 
 	t.Run("Non-generated updates are written to secrets", func(t *testing.T) {
@@ -390,8 +386,8 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &secrets).Return(false)
 
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.True(dirty)
-		assert.Equal([]byte("password"), secrets.Data["non-generated"])
+		assert.True(t, dirty)
+		assert.Equal(t, []byte("password"), secrets.Data["non-generated"])
 	})
 
 	t.Run("An updated SSH key is generated", func(t *testing.T) {
@@ -420,7 +416,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
 		mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(true)
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
 		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"dirty": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
 	})
@@ -451,7 +447,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
 		mockSecrets.On("SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{}).Return(false)
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSecrets.AssertCalled(t, "SSHKeyGenerate", map[string][]byte{}, map[string][]byte{}, ssh.SSHKey{})
 		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"clean": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
 	})
@@ -480,7 +476,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
 		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
 	})
@@ -509,7 +505,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
 		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
 	})
@@ -538,7 +534,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(true)
 		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.True(dirty)
+		assert.True(t, dirty)
 		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
 	})
@@ -567,15 +563,13 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		mockSecrets.On("GenerateSSLCerts", &secrets, &updates).Return(false)
 		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		dirty := GenerateSecrets(manifest, &secrets, &updates)
-		assert.False(dirty)
+		assert.False(t, dirty)
 		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
 		mockSecrets.AssertCalled(t, "GenerateSSLCerts", &secrets, &updates)
 	})
 }
 
 func TestUpdateVariable(t *testing.T) {
-	assert := assert.New(t)
-
 	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
 		t.Parallel()
 
@@ -587,8 +581,8 @@ func TestUpdateVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NOT_IN_SECRETS"}
 		result := updateVariable(&secrets, &update, &configVar)
-		assert.True(result)
-		assert.Equal("value1", string(secrets.Data["not-in-secrets"]))
+		assert.True(t, result)
+		assert.Equal(t, "value1", string(secrets.Data["not-in-secrets"]))
 	})
 
 	t.Run("NameNotInUpdates", func(t *testing.T) {
@@ -602,8 +596,8 @@ func TestUpdateVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NOT_IN_UPDATES"}
 		result := updateVariable(&secrets, &update, &configVar)
-		assert.False(result)
-		assert.Equal("value2", string(secrets.Data["not-in-updates"]))
+		assert.False(t, result)
+		assert.Equal(t, "value2", string(secrets.Data["not-in-updates"]))
 	})
 
 	t.Run("NameInUpdatesAndSecrets", func(t *testing.T) {
@@ -618,14 +612,12 @@ func TestUpdateVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "IN_UPDATES"}
 		result := updateVariable(&secrets, &update, &configVar)
-		assert.False(result)
-		assert.Equal("orig", string(secrets.Data["in-updates"]))
+		assert.False(t, result)
+		assert.Equal(t, "orig", string(secrets.Data["in-updates"]))
 	})
 }
 
 func TestMigrateRenamedVariable(t *testing.T) {
-	assert := assert.New(t)
-
 	t.Run("NoPreviousNames", func(t *testing.T) {
 		t.Parallel()
 
@@ -634,8 +626,8 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME"}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.False(result)
-		assert.Empty(string(secrets.Data["new-name"]))
+		assert.False(t, result)
+		assert.Empty(t, string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithoutValue", func(t *testing.T) {
@@ -647,8 +639,8 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.False(result)
-		assert.Empty(string(secrets.Data["new-name"]))
+		assert.False(t, result)
+		assert.Empty(t, string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithValue", func(t *testing.T) {
@@ -660,8 +652,8 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.True(result)
-		assert.Equal("value1", string(secrets.Data["new-name"]))
+		assert.True(t, result)
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("NewValueAlreadyExists", func(t *testing.T) {
@@ -674,8 +666,8 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.False(result)
-		assert.Equal("value2", string(secrets.Data["new-name"]))
+		assert.False(t, result)
+		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("MultiplePreviousNames", func(t *testing.T) {
@@ -688,8 +680,8 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.True(result)
-		assert.Equal("value1", string(secrets.Data["new-name"]))
+		assert.True(t, result)
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("MultiplePreviousNamesMissingSomeValues", func(t *testing.T) {
@@ -701,7 +693,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
-		assert.True(result)
-		assert.Equal("value2", string(secrets.Data["new-name"]))
+		assert.True(t, result)
+		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
 	})
 }

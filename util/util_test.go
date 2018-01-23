@@ -19,19 +19,15 @@ func (m *MockLog) Fatal(str string, message ...interface{}) {
 func TestConvertNameToKey(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	input := "APP_PASSPHRASE"
 
 	output := ConvertNameToKey(input)
 
-	assert.Equal("app-passphrase", output)
+	assert.Equal(t, "app-passphrase", output)
 }
 
 func TestSetupEnv(t *testing.T) {
 	t.Parallel()
-
-	assert := assert.New(t)
 
 	osEnviron = func() []string {
 		return []string{"FOO=BAR"}
@@ -39,19 +35,17 @@ func TestSetupEnv(t *testing.T) {
 
 	setupEnv()
 
-	assert.Equal("BAR", env["FOO"])
+	assert.Equal(t, "BAR", env["FOO"])
 }
 
 func TestExpandEnvTemplates(t *testing.T) {
-	assert := assert.New(t)
-
 	//
 	// Test that variable replacement works
 	//
 	t.Run("VariableReplacementShouldWork", func(t *testing.T) {
 		t.Parallel()
 		env["FOO"] = "BAR"
-		assert.Equal("a BAR variable", ExpandEnvTemplates("a {{.FOO}} variable"))
+		assert.Equal(t, "a BAR variable", ExpandEnvTemplates("a {{.FOO}} variable"))
 	})
 
 	//
