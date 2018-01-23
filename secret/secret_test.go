@@ -635,7 +635,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME"}
 		result := migrateRenamedVariable(&secrets, &configVar)
 		assert.False(result)
-		assert.Equal("", string(secrets.Data["new-name"]))
+		assert.Empty(string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithoutValue", func(t *testing.T) {
@@ -648,7 +648,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		configVar := model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		result := migrateRenamedVariable(&secrets, &configVar)
 		assert.False(result)
-		assert.Equal("", string(secrets.Data["new-name"]))
+		assert.Empty(string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithValue", func(t *testing.T) {
