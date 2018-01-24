@@ -8,6 +8,7 @@ import (
 	"log"
 
 	"golang.org/x/crypto/ssh"
+	"k8s.io/api/core/v1"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/util"
@@ -18,25 +19,26 @@ type SSHKey struct {
 	Fingerprint string // Name to associate with fingerprint
 }
 
-func GenerateSSHKey(secretData map[string][]byte, updateData map[string][]byte, key SSHKey) bool {
+func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
 	// Only create keys, don't update them
-	if len(secretData[secretKey]) > 0 {
-		return false
+	if len(secrets.Data[secretKey]) > 0 {
+		return
 	}
 
 	// Prefer user supplied update data over generating the keys ourselves
-	if len(updateData[secretKey]) > 0 {
-		if len(updateData[fingerprintKey]) == 0 {
+	if len(updates.Data[secretKey]) > 0 {
+		if len(updates.Data[fingerprintKey]) == 0 {
 			log.Fatalf("Update includes %s but not %s", secretKey, fingerprintKey)
 		}
-		secretData[secretKey] = updateData[secretKey]
-		secretData[fingerprintKey] = updateData[fingerprintKey]
-		return true
+		secrets.Data[secretKey] = updates.Data[secretKey]
+		secrets.Data[fingerprintKey] = updates.Data[fingerprintKey]
+		util.MarkAsDirty(secrets)
+		return
 	}
-	if len(updateData[fingerprintKey]) > 0 {
+	if len(updates.Data[fingerprintKey]) > 0 {
 		log.Fatalf("Update includes %s but not %s", fingerprintKey, secretKey)
 	}
 
@@ -46,14 +48,11 @@ func GenerateSSHKey(secretData map[string][]byte, updateData map[string][]byte, 
 		log.Fatal(err)
 	}
 
-	privateBlock := pem.Block{
+	privateBlock := &pem.Block{
 		Type:    "RSA PRIVATE KEY",
 		Headers: nil,
 		Bytes:   x509.MarshalPKCS1PrivateKey(private),
 	}
-
-	// PEM encode private key
-	secretData[secretKey] = pem.EncodeToMemory(&privateBlock)
 
 	// generate MD5 fingerprint
 	public, err := ssh.NewPublicKey(&private.PublicKey)
@@ -61,8 +60,10 @@ func GenerateSSHKey(secretData map[string][]byte, updateData map[string][]byte, 
 		log.Fatal(err)
 	}
 
-	secretData[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
-	return true
+	// PEM encode private key
+	secrets.Data[secretKey] = pem.EncodeToMemory(privateBlock)
+	secrets.Data[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
+	util.MarkAsDirty(secrets)
 }
 
 func RecordSSHKeyInfo(keys map[string]SSHKey, configVar *model.ConfigurationVariable) {

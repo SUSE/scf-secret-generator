@@ -57,14 +57,15 @@ func GetSecretInterface() secretInterface {
 	return clientSet.CoreV1().Secrets(getEnv("KUBERNETES_NAMESPACE"))
 }
 
-func UpdateSecrets(s secretInterface, secrets *v1.Secret, create, dirty bool) {
+func UpdateSecrets(s secretInterface, secrets *v1.Secret, create bool) {
 	if create {
 		_, err := s.Create(secrets)
 		if err != nil {
 			logFatal(err)
 		}
 		log.Println("Created `secret`")
-	} else if dirty {
+	} else if util.IsDirty(secrets) {
+		util.MarkAsClean(secrets)
 		_, err := s.Update(secrets)
 		if err != nil {
 			logFatal(err)
@@ -73,7 +74,7 @@ func UpdateSecrets(s secretInterface, secrets *v1.Secret, create, dirty bool) {
 	}
 }
 
-func GetOrCreateSecrets(s secretInterface) (create bool, secrets *v1.Secret, updates *v1.Secret) {
+func GetOrCreateSecrets(s secretInterface) (create bool, secrets, updates *v1.Secret) {
 	secretUpdateName := SECRET_UPDATE_NAME
 	releaseRevision := getEnv("RELEASE_REVISION")
 	if releaseRevision != "" {
@@ -109,19 +110,19 @@ func GetOrCreateSecrets(s secretInterface) (create bool, secrets *v1.Secret, upd
 	return
 }
 
-func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
+func GenerateSecrets(manifest model.Manifest, secrets, updates *v1.Secret) {
 	sshKeys := make(map[string]ssh.SSHKey)
 
 	// go over the list of variables and run the appropriate generator function
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Secret {
-			dirty = migrateRenamedVariable(secrets, configVar) || dirty
+			migrateRenamedVariable(secrets, configVar)
 			if configVar.Generator == nil {
-				dirty = updateVariable(secrets, updates, configVar) || dirty
+				updateVariable(secrets, updates, configVar)
 			} else {
 				switch configVar.Generator.Type {
 				case model.GeneratorTypePassword:
-					dirty = passGenerate(secrets.Data, updates.Data, configVar.Name) || dirty
+					passGenerate(secrets, updates, configVar.Name)
 
 				case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
 					recordSSLCertInfo(configVar)
@@ -134,34 +135,33 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, updates *v1.Se
 	}
 
 	for _, key := range sshKeys {
-		dirty = sshKeyGenerate(secrets.Data, updates.Data, key) || dirty
+		sshKeyGenerate(secrets, updates, key)
 	}
 
-	dirty = generateSSLCerts(secrets, updates) || dirty
+	generateSSLCerts(secrets, updates)
 
 	return
 }
 
-func updateVariable(secrets *v1.Secret, updates *v1.Secret, configVar *model.ConfigurationVariable) (dirty bool) {
+func updateVariable(secrets, updates *v1.Secret, configVar *model.ConfigurationVariable) {
 	name := util.ConvertNameToKey(configVar.Name)
 	if len(secrets.Data[name]) == 0 && len(updates.Data[name]) > 0 {
 		secrets.Data[name] = updates.Data[name]
-		dirty = true
+		util.MarkAsDirty(secrets)
 	}
 	return
 }
 
-func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) (dirty bool) {
+func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) {
 	name := util.ConvertNameToKey(configVar.Name)
 	if len(secrets.Data[name]) == 0 {
 		for _, previousName := range configVar.PreviousNames {
 			previousValue := secrets.Data[util.ConvertNameToKey(previousName)]
 			if len(previousValue) > 0 {
 				secrets.Data[name] = previousValue
-				dirty = true
+				util.MarkAsDirty(secrets)
 				return
 			}
 		}
 	}
-	return
 }

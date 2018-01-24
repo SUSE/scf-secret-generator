@@ -3,22 +3,23 @@ package password
 import (
 	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/dchest/uniuri"
+	"k8s.io/api/core/v1"
 )
 
 // GeneratePassword generates a password for `secretName` if it doesn't already exist
-func GeneratePassword(secretData map[string][]byte, updateData map[string][]byte, secretName string) bool {
+func GeneratePassword(secrets, updates *v1.Secret, secretName string) {
 	secretKey := util.ConvertNameToKey(secretName)
 
 	// Only create keys, don't update them
-	if len(secretData[secretKey]) > 0 {
-		return false
+	if len(secrets.Data[secretKey]) > 0 {
+		return
 	}
 
-	if len(updateData[secretKey]) > 0 {
-		secretData[secretKey] = updateData[secretKey]
+	if len(updates.Data[secretKey]) > 0 {
+		secrets.Data[secretKey] = updates.Data[secretKey]
 	} else {
 		password := uniuri.NewLen(64)
-		secretData[secretKey] = []byte(password)
+		secrets.Data[secretKey] = []byte(password)
 	}
-	return true
+	util.MarkAsDirty(secrets)
 }
