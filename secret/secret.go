@@ -59,6 +59,7 @@ func GetSecretInterface() secretInterface {
 
 func UpdateSecrets(s secretInterface, secrets *v1.Secret, create bool) {
 	if create {
+		util.MarkAsClean(secrets)
 		_, err := s.Create(secrets)
 		if err != nil {
 			logFatal(err)
@@ -139,8 +140,6 @@ func GenerateSecrets(manifest model.Manifest, secrets, updates *v1.Secret) {
 	}
 
 	generateSSLCerts(secrets, updates)
-
-	return
 }
 
 func updateVariable(secrets, updates *v1.Secret, configVar *model.ConfigurationVariable) {
@@ -149,7 +148,6 @@ func updateVariable(secrets, updates *v1.Secret, configVar *model.ConfigurationV
 		secrets.Data[name] = updates.Data[name]
 		util.MarkAsDirty(secrets)
 	}
-	return
 }
 
 func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) {

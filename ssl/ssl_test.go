@@ -157,14 +157,14 @@ func TestGenerateCerts(t *testing.T) {
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCA returns true
-		mockSSL.On("createCA", secrets, updates, CERT_ID).Return(true)
+		mockSSL.On("createCA", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCA", secrets, updates, CERT_ID)
 
 		// When createCA returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCA", secrets, updates, CERT_ID).Return(false)
+		mockSSL.On("createCA", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCA", secrets, updates, CERT_ID)
 	})
@@ -184,14 +184,14 @@ func TestGenerateCerts(t *testing.T) {
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(true)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(false)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
@@ -212,14 +212,14 @@ func TestGenerateCerts(t *testing.T) {
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(true)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(false)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
@@ -241,14 +241,14 @@ func TestGenerateCerts(t *testing.T) {
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(true)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(false)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 	})
@@ -269,14 +269,14 @@ func TestGenerateCerts(t *testing.T) {
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(true)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID).Return(false)
+		mockSSL.On("createCert", secrets, updates, CERT_ID)
 		GenerateCerts(secrets, updates)
 		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
 	})

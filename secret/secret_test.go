@@ -127,6 +127,8 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Neither Create Nor Update called", func(t *testing.T) {
+		t.Parallel()
+
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
@@ -139,8 +141,11 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 	})
 
 	t.Run("Create, but don't update", func(t *testing.T) {
+		t.Parallel()
+
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
+		util.MarkAsDirty(secrets)
 
 		s.On("Create", secrets).Return(nil, nil)
 		s.On("Update", secrets).Return(nil, nil)
@@ -148,9 +153,12 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 		UpdateSecrets(&s, secrets, true)
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
+		assert.False(t, util.IsDirty(secrets), "Secrets should always be clean after being created")
 	})
 
 	t.Run("Update, but don't create", func(t *testing.T) {
+		t.Parallel()
+
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		util.MarkAsDirty(secrets)
@@ -161,6 +169,7 @@ func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
 		UpdateSecrets(&s, secrets, false)
 		s.AssertNotCalled(t, "Create", secrets)
 		s.AssertCalled(t, "Update", secrets)
+		assert.False(t, util.IsDirty(secrets), "Secrets should always be clean after being updated")
 	})
 }
 
@@ -217,8 +226,8 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		s.On("Get", SECRET_NAME, metav1.GetOptions{})
 		create, secrets, _ := GetOrCreateSecrets(&s)
 		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME])
-		assert.False(t, create)
+		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME], "Mocked secrets contain their name as a secret value")
+		assert.False(t, create, "The create flag is not set when the secret already exists")
 	})
 
 	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {

@@ -14,8 +14,8 @@ func TestNewPasswordIsCreated(t *testing.T) {
 
 	GeneratePassword(secrets, updates, "foo")
 
-	assert.True(t, util.IsDirty(secrets))
-	assert.Len(t, secrets.Data["foo"], 64)
+	assert.True(t, util.IsDirty(secrets), "Secrets should be dirty after adding a password")
+	assert.Len(t, secrets.Data["foo"], 64, "Generated passwords are 64 characters long")
 }
 
 func TestExistingPasswordIsNotChanged(t *testing.T) {
@@ -27,6 +27,6 @@ func TestExistingPasswordIsNotChanged(t *testing.T) {
 	secrets.Data["foo"] = data
 
 	GeneratePassword(secrets, updates, "foo")
-	assert.False(t, util.IsDirty(secrets))
-	assert.Equal(t, data, secrets.Data["foo"])
+	assert.False(t, util.IsDirty(secrets), "Secrets should be clean because the password was not changed")
+	assert.Equal(t, data, secrets.Data["foo"], "The value of existing password should not change")
 }
