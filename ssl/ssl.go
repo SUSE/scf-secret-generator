@@ -60,11 +60,11 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	certInfo[configVar.Generator.ID] = info
 }
 
-func GenerateCerts(secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
+func GenerateCerts(secrets, updates *v1.Secret) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if info.IsAuthority {
-			dirty = createCA(secrets, updates, id) || dirty
+			createCA(secrets, updates, id)
 		}
 	}
 	for id, info := range certInfo {
@@ -74,7 +74,7 @@ func GenerateCerts(secrets *v1.Secret, updates *v1.Secret) (dirty bool) {
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		dirty = createCert(secrets, updates, id) || dirty
+		createCert(secrets, updates, id)
 	}
 	return
 }
@@ -83,7 +83,7 @@ func rsaKeyRequest() *csr.BasicKeyRequest {
 	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
 }
 
-func createCAImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
+func createCAImpl(secrets, updates *v1.Secret, id string) {
 	var err error
 	info := certInfo[id]
 
@@ -92,27 +92,28 @@ func createCAImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
 		info.Certificate = secrets.Data[info.CertificateName]
 		certInfo[id] = info
-		return false
+		return
 	}
 	if updateCert(secrets, updates, id) {
-		return true
+		return
 	}
 
-	req := csr.CertificateRequest{
+	req := &csr.CertificateRequest{
 		CA:         &csr.CAConfig{Expiry: "262800h"}, // 30 years
 		CN:         "SCF CA",
 		KeyRequest: rsaKeyRequest(),
 	}
-	info.Certificate, _, info.PrivateKey, err = initca.New(&req)
+	info.Certificate, _, info.PrivateKey, err = initca.New(req)
 	if err != nil {
 		logFatalf("Cannot create CA: %s", err)
-		return false
+		return
 	}
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
+	util.MarkAsDirty(secrets)
+
 	certInfo[id] = info
-	return true
 }
 
 func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
@@ -123,44 +124,44 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
+func createCertImpl(secrets, updates *v1.Secret, id string) {
 	var err error
 	info := certInfo[id]
 
 	if len(secrets.Data[info.PrivateKeyName]) > 0 {
-		return false
+		return
 	}
 	if updateCert(secrets, updates, id) {
-		return true
+		return
 	}
 
 	// XXX Add support for multiple CAs
 	caInfo := certInfo[DEFAULT_CA]
 	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
 		logFatalf("CA %s not found", DEFAULT_CA)
-		return false
+		return
 	}
 
-	req := csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
+	req := &csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
 
 	if info.RoleName != "" {
-		addHost(&req, true, info.RoleName)
-		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc")
-		addHost(&req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
+		addHost(req, true, info.RoleName)
+		addHost(req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc")
+		addHost(req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
 
 		// Generate wildcard certs for stateful sets for self-clustering roles
 		// We do this instead of having a bunch of subject alt names so that the
 		// certs can work correctly if we scale the cluster post-deployment.
 		prefix := fmt.Sprintf("*.%s-set", info.RoleName)
-		addHost(&req, false, prefix)
-		addHost(&req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc")
-		addHost(&req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
+		addHost(req, false, prefix)
+		addHost(req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc")
+		addHost(req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
 
-		addHost(&req, true, info.RoleName+".{{.KUBE_SERVICE_DOMAIN_SUFFIX}}")
+		addHost(req, true, info.RoleName+".{{.KUBE_SERVICE_DOMAIN_SUFFIX}}")
 	}
 
 	for _, name := range info.SubjectNames {
-		addHost(&req, false, name)
+		addHost(req, false, name)
 	}
 
 	if len(req.Hosts) == 0 {
@@ -170,21 +171,21 @@ func createCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 
 	var signingReq []byte
 	g := &csr.Generator{Validator: genkey.Validator}
-	signingReq, info.PrivateKey, err = g.ProcessRequest(&req)
+	signingReq, info.PrivateKey, err = g.ProcessRequest(req)
 	if err != nil {
 		logFatalf("Cannot generate cert: %s", err)
-		return false
+		return
 	}
 
 	caCert, err := helpers.ParseCertificatePEM(caInfo.Certificate)
 	if err != nil {
 		logFatalf("Cannot parse CA cert: %s", err)
-		return false
+		return
 	}
 	caKey, err := helpers.ParsePrivateKeyPEM(caInfo.PrivateKey)
 	if err != nil {
 		logFatalf("Cannot parse CA private key: %s", err)
-		return false
+		return
 	}
 
 	signingProfile := &config.SigningProfile{
@@ -200,23 +201,22 @@ func createCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	s, err := local.NewSigner(caKey, caCert, signer.DefaultSigAlgo(caKey), policy)
 	if err != nil {
 		logFatalf("Cannot create signer: %s", err)
-		return false
+		return
 	}
 
 	info.Certificate, err = s.Sign(signer.SignRequest{Request: string(signingReq)})
 	if err != nil {
 		logFatalf("Failed to sign cert: %s", err)
-		return false
+		return
 	}
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
+	util.MarkAsDirty(secrets)
 	certInfo[id] = info
-
-	return true
 }
 
-func updateCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
+func updateCertImpl(secrets, updates *v1.Secret, id string) bool {
 	info := certInfo[id]
 
 	if len(updates.Data[info.PrivateKeyName]) > 0 {
@@ -226,6 +226,7 @@ func updateCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 		}
 		secrets.Data[info.PrivateKeyName] = updates.Data[info.PrivateKeyName]
 		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
+		util.MarkAsDirty(secrets)
 
 		// keep cert info in case this is a CA
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
@@ -236,7 +237,6 @@ func updateCertImpl(secrets *v1.Secret, updates *v1.Secret, id string) bool {
 	}
 	if len(updates.Data[info.CertificateName]) > 0 {
 		logFatalf("Update includes %s but not %s", info.CertificateName, info.PrivateKeyName)
-		return false
 	}
 	return false
 }

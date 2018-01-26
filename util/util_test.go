@@ -6,6 +6,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"k8s.io/api/core/v1"
 )
 
 type MockLog struct {
@@ -19,19 +20,15 @@ func (m *MockLog) Fatal(str string, message ...interface{}) {
 func TestConvertNameToKey(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	input := "APP_PASSPHRASE"
 
 	output := ConvertNameToKey(input)
 
-	assert.Equal(output, "app-passphrase")
+	assert.Equal(t, "app-passphrase", output)
 }
 
 func TestSetupEnv(t *testing.T) {
 	t.Parallel()
-
-	assert := assert.New(t)
 
 	osEnviron = func() []string {
 		return []string{"FOO=BAR"}
@@ -39,19 +36,17 @@ func TestSetupEnv(t *testing.T) {
 
 	setupEnv()
 
-	assert.Equal(env["FOO"], "BAR")
+	assert.Equal(t, "BAR", env["FOO"])
 }
 
 func TestExpandEnvTemplates(t *testing.T) {
-	assert := assert.New(t)
-
 	//
 	// Test that variable replacement works
 	//
 	t.Run("VariableReplacementShouldWork", func(t *testing.T) {
 		t.Parallel()
 		env["FOO"] = "BAR"
-		assert.Equal(ExpandEnvTemplates("a {{.FOO}} variable"), "a BAR variable")
+		assert.Equal(t, "a BAR variable", ExpandEnvTemplates("a {{.FOO}} variable"))
 	})
 
 	//
@@ -76,4 +71,20 @@ func TestExpandEnvTemplates(t *testing.T) {
 			"Can't parse templates in '%s': %s",
 			[]interface{}{"{{.bad", errors.New("template: :1: unclosed action")})
 	})
+}
+
+func TestDirtySecrets(t *testing.T) {
+	t.Parallel()
+
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+	assert.False(t, IsDirty(secrets))
+
+	MarkAsClean(secrets)
+	assert.False(t, IsDirty(secrets))
+
+	MarkAsDirty(secrets)
+	assert.True(t, IsDirty(secrets))
+
+	MarkAsClean(secrets)
+	assert.False(t, IsDirty(secrets))
 }

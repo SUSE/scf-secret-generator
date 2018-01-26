@@ -3,32 +3,30 @@ package password
 import (
 	"testing"
 
+	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/api/core/v1"
 )
 
 func TestNewPasswordIsCreated(t *testing.T) {
-	assert := assert.New(t)
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+	updates := &v1.Secret{Data: map[string][]byte{}}
 
-	secretData := make(map[string][]byte)
-	updateData := make(map[string][]byte)
+	GeneratePassword(secrets, updates, "foo")
 
-	result := GeneratePassword(secretData, updateData, "foo")
-
-	assert.True(result)
-	assert.Equal(len(secretData["foo"]), 64)
+	assert.True(t, util.IsDirty(secrets), "Secrets should be dirty after adding a password")
+	assert.Len(t, secrets.Data["foo"], 64, "Generated passwords are 64 characters long")
 }
 
 func TestExistingPasswordIsNotChanged(t *testing.T) {
-	assert := assert.New(t)
-
 	data := []byte("bar")
 
-	secretData := make(map[string][]byte)
-	updateData := make(map[string][]byte)
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+	updates := &v1.Secret{Data: map[string][]byte{}}
 
-	secretData["foo"] = data
+	secrets.Data["foo"] = data
 
-	result := GeneratePassword(secretData, updateData, "foo")
-	assert.False(result)
-	assert.Equal(secretData["foo"], data)
+	GeneratePassword(secrets, updates, "foo")
+	assert.False(t, util.IsDirty(secrets), "Secrets should be clean because the password was not changed")
+	assert.Equal(t, data, secrets.Data["foo"], "The value of existing password should not change")
 }

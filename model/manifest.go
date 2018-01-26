@@ -55,15 +55,16 @@ type ConfigurationVariableGenerator struct {
 //    A public CV is used in templates
 //    An internal CV is not, consumed in a script instead.
 type ConfigurationVariable struct {
-	Name        string                          `yaml:"name"`
-	Default     interface{}                     `yaml:"default"`
-	Description string                          `yaml:"description"`
-	Example     string                          `yaml:"example"`
-	Generator   *ConfigurationVariableGenerator `yaml:"generator"`
-	Type        CVType                          `yaml:"type"`
-	Internal    bool                            `yaml:"internal,omitempty"`
-	Secret      bool                            `yaml:"secret,omitempty"`
-	Required    bool                            `yaml:"required,omitempty"`
+	Name          string                          `yaml:"name"`
+	PreviousNames []string                        `yaml:"previous_names"`
+	Default       interface{}                     `yaml:"default"`
+	Description   string                          `yaml:"description"`
+	Example       string                          `yaml:"example"`
+	Generator     *ConfigurationVariableGenerator `yaml:"generator"`
+	Type          CVType                          `yaml:"type"`
+	Internal      bool                            `yaml:"internal,omitempty"`
+	Secret        bool                            `yaml:"secret,omitempty"`
+	Required      bool                            `yaml:"required,omitempty"`
 }
 
 // CVType is the type of the configuration variable; see the constants below

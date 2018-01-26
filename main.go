@@ -24,7 +24,7 @@ func main() {
 
 	create, secrets, updates := secret.GetOrCreateSecrets(s)
 
-	dirty := secret.GenerateSecrets(manifest, secrets, updates)
+	secret.GenerateSecrets(manifest, secrets, updates)
 
-	secret.UpdateSecrets(s, secrets, create, dirty)
+	secret.UpdateSecrets(s, secrets, create)
 }

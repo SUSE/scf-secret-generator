@@ -8,7 +8,9 @@ import (
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
+	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/stretchr/testify/assert"
+	"k8s.io/api/core/v1"
 )
 
 // GenerateSSHKey tests
@@ -16,51 +18,48 @@ import (
 func TestNewKeyIsCreated(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-	secretData := make(map[string][]byte)
-	updateData := make(map[string][]byte)
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	key := SSHKey{
 		PrivateKey:  "foo",
 		Fingerprint: "bar",
 	}
 
-	result := GenerateSSHKey(secretData, updateData, key)
+	GenerateSSHKey(secrets, updates, key)
 
-	assert.True(result)
+	assert.True(t, util.IsDirty(secrets))
 
-	assert.Contains(string(secretData["foo"]), "BEGIN RSA PRIVATE KEY")
-	assert.Contains(string(secretData["foo"]), "END RSA PRIVATE KEY")
+	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
+	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
 
 	// 16 colon separated bytes = 47
 	// 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff
-	assert.Equal(len(secretData["bar"]), 47)
+	assert.Len(t, secrets.Data["bar"], 47)
 }
 
 func TestExistingKeyIsNotChanged(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	fooData := []byte("foo-data")
 	barData := []byte("bar-data")
 
-	secretData := make(map[string][]byte)
-	updateData := make(map[string][]byte)
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	// Also tests for FOO / foo case conversion
-	secretData["foo"] = fooData
-	secretData["bar"] = barData
+	secrets.Data["foo"] = fooData
+	secrets.Data["bar"] = barData
 
 	key := SSHKey{
 		PrivateKey:  "FOO",
 		Fingerprint: "BAR",
 	}
 
-	result := GenerateSSHKey(secretData, updateData, key)
-	assert.False(result)
-	assert.Equal(secretData["foo"], fooData)
-	assert.Equal(secretData["bar"], barData)
+	GenerateSSHKey(secrets, updates, key)
+	assert.False(t, util.IsDirty(secrets))
+	assert.Equal(t, fooData, secrets.Data["foo"])
+	assert.Equal(t, barData, secrets.Data["bar"])
 }
 
 // RecordSSHKeyInfo tests
@@ -68,11 +67,9 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 func TestRecordingFingerprintCreatesKey(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	keys := make(map[string]SSHKey)
 
-	configVar := model.ConfigurationVariable{
+	configVar := &model.ConfigurationVariable{
 		Name: "FINGERPRINT_NAME",
 	}
 	configVar.Generator = &model.ConfigurationVariableGenerator{
@@ -80,19 +77,17 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 		ValueType: model.ValueTypeFingerprint,
 	}
 
-	RecordSSHKeyInfo(keys, &configVar)
+	RecordSSHKeyInfo(keys, configVar)
 
-	assert.Equal(keys["foo"].Fingerprint, "FINGERPRINT_NAME")
+	assert.Equal(t, "FINGERPRINT_NAME", keys["foo"].Fingerprint)
 }
 
 func TestRecordingPrivateCreatesKey(t *testing.T) {
 	t.Parallel()
 
-	assert := assert.New(t)
-
 	keys := make(map[string]SSHKey)
 
-	configVar := model.ConfigurationVariable{
+	configVar := &model.ConfigurationVariable{
 		Name: "PRIVATE_KEY_NAME",
 	}
 	configVar.Generator = &model.ConfigurationVariableGenerator{
@@ -100,7 +95,7 @@ func TestRecordingPrivateCreatesKey(t *testing.T) {
 		ValueType: model.ValueTypePrivateKey,
 	}
 
-	RecordSSHKeyInfo(keys, &configVar)
+	RecordSSHKeyInfo(keys, configVar)
 
-	assert.Equal(keys["foo"].PrivateKey, "PRIVATE_KEY_NAME")
+	assert.Equal(t, "PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
 }
