@@ -40,9 +40,36 @@ type MockSecretInterfaceUnknown struct {
 	MockSecretInterface
 }
 
+type MockSecretInterfaceMany struct {
+	MockSecretInterface
+}
+
 func (m *MockSecretInterface) Create(secret *v1.Secret) (*v1.Secret, error) {
 	m.Called(secret)
 	return nil, nil
+}
+
+func (m *MockSecretInterface) List(options metav1.ListOptions) (*v1.SecretList, error) {
+	m.Called(options)
+	sl := v1.SecretList {
+		Items: []v1.Secret{
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "bogus",
+				},
+				Data: map[string][]byte{},
+			},
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: SECRET_NAME,
+				},
+				Data: map[string][]byte{},
+			},
+		},
+	}
+	sl.Items[0].Data["bogus"] = []byte("bogus")
+	sl.Items[1].Data[SECRET_NAME] = []byte(SECRET_NAME)
+	return &sl, nil
 }
 
 func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
@@ -92,10 +119,89 @@ func (m *MockSecretInterfaceMissing) Get(name string, options metav1.GetOptions)
 	}
 }
 
+func (m *MockSecretInterfaceMissing) List(options metav1.ListOptions) (*v1.SecretList, error) {
+	m.Called(options)
+	sl := v1.SecretList {
+		Items: []v1.Secret{
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "nothing",
+				},
+				Data: map[string][]byte{},
+			},
+		},
+	}
+	sl.Items[0].Data["nothing"] = []byte("nothing")
+	return &sl, nil
+}
+
 func (m *MockSecretInterfaceUnknown) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
 	m.Called(name, options)
 
 	return nil, errors.New("unknownerr")
+}
+
+func (m *MockSecretInterfaceMany) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
+	m.Called(name, options)
+
+	if name == SECRET_NAME {
+		resource := schema.GroupResource{}
+		return nil, k8serrors.NewNotFound(resource, "")
+	} else {
+		secret := v1.Secret{
+			ObjectMeta: metav1.ObjectMeta{
+				Name: SECRET_NAME,
+			},
+			Data: map[string][]byte{},
+		}
+
+		secret.Data[name] = []byte(name)
+		return &secret, nil
+	}
+}
+
+func (m *MockSecretInterfaceMany) List(options metav1.ListOptions) (*v1.SecretList, error) {
+	m.Called(options)
+	sl := v1.SecretList {
+		Items: []v1.Secret{
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "nothingness",
+				},
+				Data: map[string][]byte{},
+			},
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: SECRET_NAME+"-1",
+				},
+				Data: map[string][]byte{},
+			},
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: "bogus",
+				},
+				Data: map[string][]byte{},
+			},
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: SECRET_NAME+"-12",
+				},
+				Data: map[string][]byte{},
+			},
+			v1.Secret{
+				ObjectMeta: metav1.ObjectMeta{
+					Name: SECRET_NAME,
+				},
+				Data: map[string][]byte{},
+			},
+		},
+	}
+	sl.Items[0].Data["nothingness"] = []byte("nothingness")
+	sl.Items[1].Data[SECRET_NAME+"-1"] = []byte(SECRET_NAME+"-1")
+	sl.Items[2].Data["bogus"] = []byte("bogus")
+	sl.Items[3].Data[SECRET_NAME+"-12"] = []byte(SECRET_NAME+"-12")
+	sl.Items[4].Data[SECRET_NAME] = []byte(SECRET_NAME)
+	return &sl, nil
 }
 
 type MockSecrets struct {
@@ -209,12 +315,13 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 			return "1234"
 		}
 		s.On("Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		s.On("List", metav1.ListOptions{})
 		_, _, _ = GetOrCreateSecrets(&s)
 		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
+		s.AssertCalled(t, "List", metav1.ListOptions{})
 	})
 
-	t.Run("Valid secret-updates should call get with SECRET_NAME and return that secret", func(t *testing.T) {
+	t.Run("Valid secret-updates should call List and return the SECRET_NAME secret", func(t *testing.T) {
 		var s MockSecretInterface
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
@@ -224,10 +331,28 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		}
 		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
 		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		s.On("List", metav1.ListOptions{})
 		create, secrets, _ := GetOrCreateSecrets(&s)
-		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+		s.AssertCalled(t, "List", metav1.ListOptions{})
 		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME], "Mocked secrets contain their name as a secret value")
 		assert.False(t, create, "The create flag is not set when the secret already exists")
+	})
+
+	t.Run("Valid secret-updates with revision should call List and return the best-revision SECRET_NAME secret", func(t *testing.T) {
+		var sMany MockSecretInterfaceMany
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			return "15"
+		}
+		sMany.On("Get", SECRET_UPDATE_NAME+"-15", metav1.GetOptions{})
+		sMany.On("List", metav1.ListOptions{})
+		create, secrets, _ := GetOrCreateSecrets(&sMany)
+		sMany.AssertCalled(t, "List", metav1.ListOptions{})
+		assert.Equal(t, SECRET_NAME+"-15", secrets.Name, "GetOrCreate bumps the secret name to the new version to make")
+		assert.Equal(t, SECRET_NAME+"-12", string(secrets.Data[SECRET_NAME+"-12"]), "Mocked secrets contain their name as a secret value")
+		assert.True(t, create, "The create flag is set when a versioned secret already exists")
 	})
 
 	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {
@@ -239,14 +364,14 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 			return ""
 		}
 		sMissing.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
+		sMissing.On("List", metav1.ListOptions{})
 		create, secrets, updates := GetOrCreateSecrets(&sMissing)
 		assert.True(t, create)
 		assert.NotNil(t, secrets)
 		assert.NotNil(t, updates)
 	})
 
-	t.Run("Unrelated Get error for SECRET_NAME should logFatal", func(t *testing.T) {
+	t.Run("Unrelated Get error for SECRET_UPDATE_NAME should logFatal", func(t *testing.T) {
 		var sUnknown MockSecretInterfaceUnknown
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
@@ -256,7 +381,7 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		}
 		mockLog.On("Fatal", []interface{}{errors.New("unknownerr")})
 		sUnknown.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		sUnknown.On("Get", SECRET_NAME, metav1.GetOptions{})
+		//sUnknown.On("Get", SECRET_NAME, metav1.GetOptions{})
 		_, _, _ = GetOrCreateSecrets(&sUnknown)
 		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("unknownerr")})
 	})

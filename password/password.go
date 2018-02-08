@@ -1,6 +1,8 @@
 package password
 
 import (
+	"log"
+
 	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/dchest/uniuri"
 	"k8s.io/api/core/v1"
@@ -14,6 +16,8 @@ func GeneratePassword(secrets, updates *v1.Secret, secretName string) {
 	if len(secrets.Data[secretKey]) > 0 {
 		return
 	}
+
+	log.Printf("- Password: %s\n", secretName)
 
 	if len(updates.Data[secretKey]) > 0 {
 		secrets.Data[secretKey] = updates.Data[secretKey]

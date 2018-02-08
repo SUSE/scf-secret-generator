@@ -2,6 +2,7 @@ package ssl
 
 import (
 	"fmt"
+	glog "log"
 	"os"
 	"time"
 
@@ -64,6 +65,8 @@ func GenerateCerts(secrets, updates *v1.Secret) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if info.IsAuthority {
+			glog.Printf("- SSL CA: %s\n", id)
+
 			createCA(secrets, updates, id)
 		}
 	}
@@ -71,6 +74,9 @@ func GenerateCerts(secrets, updates *v1.Secret) {
 		if info.IsAuthority {
 			continue
 		}
+
+		glog.Printf("- SSL CRT: %s\n", id)
+
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}

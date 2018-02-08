@@ -28,6 +28,8 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 		return
 	}
 
+	log.Printf("- SSH priK: %s\n", key.PrivateKey)
+
 	// Prefer user supplied update data over generating the keys ourselves
 	if len(updates.Data[secretKey]) > 0 {
 		if len(updates.Data[fingerprintKey]) == 0 {
