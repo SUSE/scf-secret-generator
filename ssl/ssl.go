@@ -117,7 +117,6 @@ func createCAImpl(secrets, updates *v1.Secret, id string) {
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
-	util.MarkAsDirty(secrets)
 
 	certInfo[id] = info
 }
@@ -218,7 +217,6 @@ func createCertImpl(secrets, updates *v1.Secret, id string) {
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
-	util.MarkAsDirty(secrets)
 	certInfo[id] = info
 }
 
@@ -232,7 +230,6 @@ func updateCertImpl(secrets, updates *v1.Secret, id string) bool {
 		}
 		secrets.Data[info.PrivateKeyName] = updates.Data[info.PrivateKeyName]
 		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
-		util.MarkAsDirty(secrets)
 
 		// keep cert info in case this is a CA
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]

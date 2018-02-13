@@ -37,7 +37,6 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 		}
 		secrets.Data[secretKey] = updates.Data[secretKey]
 		secrets.Data[fingerprintKey] = updates.Data[fingerprintKey]
-		util.MarkAsDirty(secrets)
 		return
 	}
 	if len(updates.Data[fingerprintKey]) > 0 {
@@ -65,7 +64,6 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 	// PEM encode private key
 	secrets.Data[secretKey] = pem.EncodeToMemory(privateBlock)
 	secrets.Data[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
-	util.MarkAsDirty(secrets)
 }
 
 func RecordSSHKeyInfo(keys map[string]SSHKey, configVar *model.ConfigurationVariable) {

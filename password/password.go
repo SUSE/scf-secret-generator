@@ -25,5 +25,4 @@ func GeneratePassword(secrets, updates *v1.Secret, secretName string) {
 		password := uniuri.NewLen(64)
 		secrets.Data[secretKey] = []byte(password)
 	}
-	util.MarkAsDirty(secrets)
 }

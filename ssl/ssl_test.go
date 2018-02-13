@@ -7,7 +7,6 @@ import (
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
-	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/cloudflare/cfssl/csr"
 	cferr "github.com/cloudflare/cfssl/errors"
 	"github.com/stretchr/testify/assert"
@@ -317,7 +316,6 @@ func TestCreateCA(t *testing.T) {
 
 		createCAImpl(secrets, updates, CERT_ID)
 
-		assert.False(t, util.IsDirty(secrets))
 		assert.Equal(t, []byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
 		assert.Equal(t, []byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
@@ -350,7 +348,6 @@ func TestCreateCA(t *testing.T) {
 
 		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		createCAImpl(secrets, updates, CERT_ID)
-		assert.True(t, util.IsDirty(secrets))
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 	})
@@ -407,7 +404,6 @@ func TestCreateCert(t *testing.T) {
 			CertificateName: "certificate-name",
 		}
 		createCertImpl(secrets, updates, CERT_ID)
-		assert.False(t, util.IsDirty(secrets))
 	})
 
 	t.Run("If updateCert() is true, return true", func(t *testing.T) {
@@ -553,7 +549,6 @@ func TestCreateCert(t *testing.T) {
 		}
 		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		createCertImpl(secrets, updates, CERT_ID)
-		assert.True(t, util.IsDirty(secrets))
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 		_, err := tls.X509KeyPair(secrets.Data[certInfo[CERT_ID].CertificateName],
@@ -588,7 +583,6 @@ func TestCreateCert(t *testing.T) {
 		}
 		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		createCertImpl(secrets, updates, CERT_ID)
-		assert.True(t, util.IsDirty(secrets))
 		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName])
 		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].CertificateName])
 

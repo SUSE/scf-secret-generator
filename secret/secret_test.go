@@ -2,11 +2,11 @@ package secret
 
 import (
 	"errors"
+	"strconv"
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/ssh"
-	"github.com/SUSE/scf-secret-generator/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -40,42 +40,22 @@ type MockSecretInterfaceUnknown struct {
 	MockSecretInterface
 }
 
-type MockSecretInterfaceMany struct {
-	MockSecretInterface
-}
-
 func (m *MockSecretInterface) Create(secret *v1.Secret) (*v1.Secret, error) {
 	m.Called(secret)
 	return nil, nil
 }
 
-func (m *MockSecretInterface) List(options metav1.ListOptions) (*v1.SecretList, error) {
-	m.Called(options)
-	sl := v1.SecretList {
-		Items: []v1.Secret{
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "bogus",
-				},
-				Data: map[string][]byte{},
-			},
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: SECRET_NAME,
-				},
-				Data: map[string][]byte{},
-			},
-		},
-	}
-	sl.Items[0].Data["bogus"] = []byte("bogus")
-	sl.Items[1].Data[SECRET_NAME] = []byte(SECRET_NAME)
-	return &sl, nil
+func (m *MockSecretInterface) Delete(name string, options *metav1.DeleteOptions) error {
+	m.Called(name, options)
+	return nil
 }
 
 func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
 	m.Called(name, options)
 
-	if name == SECRET_UPDATE_NAME+"-missing" {
+	if name == SECRET_UPDATE_NAME+"-1" {
+		return nil, errors.New("missing")
+	} else	if name == SECRET_NAME+"-2" {
 		return nil, errors.New("missing")
 	} else if name == "notfound" {
 		resource := schema.GroupResource{}
@@ -106,45 +86,7 @@ func (m *MockSecretInterfaceMissing) Get(name string, options metav1.GetOptions)
 	if name == SECRET_NAME {
 		resource := schema.GroupResource{}
 		return nil, k8serrors.NewNotFound(resource, "")
-	} else {
-		secret := v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: SECRET_NAME,
-			},
-			Data: map[string][]byte{},
-		}
-
-		secret.Data[name] = []byte(name)
-		return &secret, nil
-	}
-}
-
-func (m *MockSecretInterfaceMissing) List(options metav1.ListOptions) (*v1.SecretList, error) {
-	m.Called(options)
-	sl := v1.SecretList {
-		Items: []v1.Secret{
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "nothing",
-				},
-				Data: map[string][]byte{},
-			},
-		},
-	}
-	sl.Items[0].Data["nothing"] = []byte("nothing")
-	return &sl, nil
-}
-
-func (m *MockSecretInterfaceUnknown) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
-	m.Called(name, options)
-
-	return nil, errors.New("unknownerr")
-}
-
-func (m *MockSecretInterfaceMany) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
-	m.Called(name, options)
-
-	if name == SECRET_NAME {
+	} else if name == SECRET_NAME+"-2" {
 		resource := schema.GroupResource{}
 		return nil, k8serrors.NewNotFound(resource, "")
 	} else {
@@ -160,48 +102,10 @@ func (m *MockSecretInterfaceMany) Get(name string, options metav1.GetOptions) (*
 	}
 }
 
-func (m *MockSecretInterfaceMany) List(options metav1.ListOptions) (*v1.SecretList, error) {
-	m.Called(options)
-	sl := v1.SecretList {
-		Items: []v1.Secret{
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "nothingness",
-				},
-				Data: map[string][]byte{},
-			},
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: SECRET_NAME+"-1",
-				},
-				Data: map[string][]byte{},
-			},
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: "bogus",
-				},
-				Data: map[string][]byte{},
-			},
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: SECRET_NAME+"-12",
-				},
-				Data: map[string][]byte{},
-			},
-			v1.Secret{
-				ObjectMeta: metav1.ObjectMeta{
-					Name: SECRET_NAME,
-				},
-				Data: map[string][]byte{},
-			},
-		},
-	}
-	sl.Items[0].Data["nothingness"] = []byte("nothingness")
-	sl.Items[1].Data[SECRET_NAME+"-1"] = []byte(SECRET_NAME+"-1")
-	sl.Items[2].Data["bogus"] = []byte("bogus")
-	sl.Items[3].Data[SECRET_NAME+"-12"] = []byte(SECRET_NAME+"-12")
-	sl.Items[4].Data[SECRET_NAME] = []byte(SECRET_NAME)
-	return &sl, nil
+func (m *MockSecretInterfaceUnknown) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
+	m.Called(name, options)
+
+	return nil, errors.New("unknownerr")
 }
 
 type MockSecrets struct {
@@ -229,57 +133,22 @@ func (m *MockSecrets) GenerateSSLCerts(secrets, updates *v1.Secret) {
 	m.Called(secrets, updates)
 }
 
-func TestUpdateSecretsWhenCreatingOrUpdating(t *testing.T) {
+func TestUpdateSecrets(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Neither Create Nor Update called", func(t *testing.T) {
-		t.Parallel()
+	var s MockSecretInterface
+	secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		var s MockSecretInterface
-		secrets := &v1.Secret{Data: map[string][]byte{}}
+	s.On("Create", secrets).Return(nil, nil)
+	s.On("Update", secrets).Return(nil, nil)
 
-		s.On("Create", secrets).Return(nil, nil)
-		s.On("Update", secrets).Return(nil, nil)
+	UpdateSecrets(&s, secrets)
 
-		UpdateSecrets(&s, secrets, false)
-		s.AssertNotCalled(t, "Create", secrets)
-		s.AssertNotCalled(t, "Update", secrets)
-	})
-
-	t.Run("Create, but don't update", func(t *testing.T) {
-		t.Parallel()
-
-		var s MockSecretInterface
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		util.MarkAsDirty(secrets)
-
-		s.On("Create", secrets).Return(nil, nil)
-		s.On("Update", secrets).Return(nil, nil)
-
-		UpdateSecrets(&s, secrets, true)
-		s.AssertCalled(t, "Create", secrets)
-		s.AssertNotCalled(t, "Update", secrets)
-		assert.False(t, util.IsDirty(secrets), "Secrets should always be clean after being created")
-	})
-
-	t.Run("Update, but don't create", func(t *testing.T) {
-		t.Parallel()
-
-		var s MockSecretInterface
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		util.MarkAsDirty(secrets)
-
-		s.On("Create", secrets).Return(nil, nil)
-		s.On("Update", secrets).Return(nil, nil)
-
-		UpdateSecrets(&s, secrets, false)
-		s.AssertNotCalled(t, "Create", secrets)
-		s.AssertCalled(t, "Update", secrets)
-		assert.False(t, util.IsDirty(secrets), "Secrets should always be clean after being updated")
-	})
+	s.AssertCalled(t, "Create", secrets)
+	s.AssertNotCalled(t, "Update", secrets)
 }
 
-func TestGetOrCreateWithValidSecrets(t *testing.T) {
+func TestCreateWithValidSecrets(t *testing.T) {
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 	defer func() {
@@ -287,72 +156,123 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		getEnv = origGetEnv
 	}()
 
-	t.Run("Missing secret-updates should logFatal", func(t *testing.T) {
+	t.Run("Missing RELEASE_VERSION should logFatal", func(t *testing.T) {
 		var s MockSecretInterface
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
 
-		getEnv = func(string) string {
-			return "missing"
-		}
-		mockLog.On("Fatal", []interface{}{errors.New("missing")})
-		s.On("Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
-
-		_, _, _ = GetOrCreateSecrets(&s)
-
-		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("missing")})
-		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-missing", metav1.GetOptions{})
-		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-	})
-
-	t.Run("secret-updates with revision should append revision to secret requested", func(t *testing.T) {
-		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			return "1234"
-		}
-		s.On("Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
-		s.On("List", metav1.ListOptions{})
-		_, _, _ = GetOrCreateSecrets(&s)
-		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1234", metav1.GetOptions{})
-		s.AssertCalled(t, "List", metav1.ListOptions{})
-	})
-
-	t.Run("Valid secret-updates should call List and return the SECRET_NAME secret", func(t *testing.T) {
-		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
+		getEnv = func(ev string) string {
+			// RELEASE_VERSION
 			return ""
 		}
+
+		mockLog.On("Fatal", []interface{}{"RELEASE_REVISION is missing or empty."})
 		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
 		s.On("Get", SECRET_NAME, metav1.GetOptions{})
-		s.On("List", metav1.ListOptions{})
-		create, secrets, _ := GetOrCreateSecrets(&s)
-		s.AssertCalled(t, "List", metav1.ListOptions{})
-		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME], "Mocked secrets contain their name as a secret value")
-		assert.False(t, create, "The create flag is not set when the secret already exists")
+
+		_, _ = CreateSecrets(&s)
+
+		s.AssertNotCalled(t, "Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+		mockLog.AssertCalled(t, "Fatal", []interface{}{"RELEASE_REVISION is missing or empty."})
 	})
 
-	t.Run("Valid secret-updates with revision should call List and return the best-revision SECRET_NAME secret", func(t *testing.T) {
-		var sMany MockSecretInterfaceMany
+	t.Run("Non-integer RELEASE_VERSION should logFatal", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// RELEASE_VERSION
+			return "foo"
+		}
+
+		invalidSyntaxError := strconv.NumError{
+			Func: "Atoi",
+			Num: "foo",
+			Err: errors.New("invalid syntax"),
+		}
+
+		mockLog.On("Fatal", []interface{}{&invalidSyntaxError})
+		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+
+		_, _ = CreateSecrets(&s)
+
+		s.AssertNotCalled(t, "Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
+		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+		mockLog.AssertCalled(t, "Fatal", []interface{}{&invalidSyntaxError})
+	})
+
+	t.Run("Missing `secret-updates` should logFatal", func(t *testing.T) {
+		var s MockSecretInterface
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
 
 		getEnv = func(string) string {
-			return "15"
+			// RELEASE_VERSION
+			return "1"
 		}
-		sMany.On("Get", SECRET_UPDATE_NAME+"-15", metav1.GetOptions{})
-		sMany.On("List", metav1.ListOptions{})
-		create, secrets, _ := GetOrCreateSecrets(&sMany)
-		sMany.AssertCalled(t, "List", metav1.ListOptions{})
-		assert.Equal(t, SECRET_NAME+"-15", secrets.Name, "GetOrCreate bumps the secret name to the new version to make")
-		assert.Equal(t, SECRET_NAME+"-12", string(secrets.Data[SECRET_NAME+"-12"]), "Mocked secrets contain their name as a secret value")
-		assert.True(t, create, "The create flag is set when a versioned secret already exists")
+
+		mockLog.On("Fatal", []interface{}{errors.New("missing")})
+		s.On("Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+
+		_, _ = CreateSecrets(&s)
+
+		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
+		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("missing")})
+	})
+
+	t.Run("Valid secret-updates should append revision to the secrets requested, call Get and return the SECRET_NAME", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			// RELEASE_VERSION
+			return "2"
+		}
+
+		s.On("Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
+		s.On("Delete", SECRET_NAME+"-0", &metav1.DeleteOptions{})
+		s.On("Get", SECRET_NAME+"-1", metav1.GetOptions{})
+
+		secrets, _ := CreateSecrets(&s)
+
+		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
+		s.AssertCalled(t, "Delete", SECRET_NAME+"-0", &metav1.DeleteOptions{})
+		s.AssertCalled(t, "Get", SECRET_NAME+"-1", metav1.GetOptions{})
+
+		assert.Equal(t, []byte(SECRET_NAME+"-1"), secrets.Data[SECRET_NAME+"-1"],
+			"Mocked secrets contain their name as a secret value")
+	})
+
+	t.Run("Should fall back to plain SECRET_NAME when no versioned SECRET_NAME available", func(t *testing.T) {
+		var s MockSecretInterface
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(string) string {
+			// RELEASE_VERSION
+			return "3"
+		}
+
+		s.On("Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
+		s.On("Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
+		s.On("Get", SECRET_NAME+"-2", metav1.GetOptions{})
+		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+
+		secrets, _ := CreateSecrets(&s)
+
+		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
+		s.AssertCalled(t, "Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
+		s.AssertCalled(t, "Get", SECRET_NAME+"-2", metav1.GetOptions{})
+		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
+
+		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME],
+			"Mocked secrets contain their name as a secret value")
 	})
 
 	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {
@@ -361,12 +281,17 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		logFatal = mockLog.Fatal
 
 		getEnv = func(string) string {
-			return ""
+			// RELEASE_VERSION
+			return "3"
 		}
-		sMissing.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		sMissing.On("List", metav1.ListOptions{})
-		create, secrets, updates := GetOrCreateSecrets(&sMissing)
-		assert.True(t, create)
+
+		sMissing.On("Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
+		sMissing.On("Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
+		sMissing.On("Get", SECRET_NAME+"-2", metav1.GetOptions{})
+		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
+
+		secrets, updates := CreateSecrets(&sMissing)
+
 		assert.NotNil(t, secrets)
 		assert.NotNil(t, updates)
 	})
@@ -377,12 +302,14 @@ func TestGetOrCreateWithValidSecrets(t *testing.T) {
 		logFatal = mockLog.Fatal
 
 		getEnv = func(string) string {
-			return ""
+			return "1"
 		}
+
 		mockLog.On("Fatal", []interface{}{errors.New("unknownerr")})
-		sUnknown.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		//sUnknown.On("Get", SECRET_NAME, metav1.GetOptions{})
-		_, _, _ = GetOrCreateSecrets(&sUnknown)
+		sUnknown.On("Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
+
+		_, _ = CreateSecrets(&sUnknown)
+
 		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("unknownerr")})
 	})
 }
@@ -681,7 +608,7 @@ func TestUpdateVariable(t *testing.T) {
 	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` is in updates but not secrets, the dirty flag should be set and the secret should be updated
+		// If `name` is in updates but not secrets, the secret should be updated
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		update := &v1.Secret{Data: map[string][]byte{}}
@@ -726,79 +653,73 @@ func TestMigrateRenamedVariable(t *testing.T) {
 	t.Run("NoPreviousNames", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has no previous names, then it should remain empty and `dirty` should be false
+		// If `name` has no previous names, then it should remain empty
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME"}
 		migrateRenamedVariable(secrets, configVar)
-		assert.False(t, util.IsDirty(secrets))
 		assert.Empty(t, string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithoutValue", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a previous name, but without value, then it should remain empty and `dirty` should be false
+		// If `name` has a previous name, but without value, then it should remain empty
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.False(t, util.IsDirty(secrets))
 		assert.Empty(t, string(secrets.Data["new-name"]))
 	})
 
 	t.Run("PreviousNameWithValue", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a previous name, then it should copy the previous value and `dirty` should be true
+		// If `name` has a previous name, then it should copy the previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.True(t, util.IsDirty(secrets))
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("NewValueAlreadyExists", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a value, then it should not be changed and `dirty` should be false
+		// If `name` has a value, then it should not be changed
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 		secrets.Data["new-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.False(t, util.IsDirty(secrets))
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("MultiplePreviousNames", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has multiple previous names, then it should copy the first previous value and `dirty` should be true
+		// If `name` has multiple previous names, then it should copy the first previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 		secrets.Data["previous-previous-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.True(t, util.IsDirty(secrets))
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
 	})
 
 	t.Run("MultiplePreviousNamesMissingSomeValues", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has multiple previous names, then it should copy the first non-empty previous value and `dirty` should be true
+		// If `name` has multiple previous names, then it should copy the first non-empty previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-previous-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.True(t, util.IsDirty(secrets))
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
 	})
 }
