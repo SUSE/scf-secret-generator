@@ -80,10 +80,10 @@ func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret, error) {
 
 	// (1) Delete really old entity (R-2), if it exists. We do not
 	// care about errors.
-	_ = s.Delete(SECRET_NAME + fmt.Sprintf("-%d", rv-2), &metav1.DeleteOptions{})
+	_ = s.Delete(fmt.Sprintf("%s-%d", SECRET_NAME, rv-2), &metav1.DeleteOptions{})
 
 	// (2) Look for and take R-1
-	previousSecret := SECRET_NAME + fmt.Sprintf("-%d", rv-1)
+	previousSecret := fmt.Sprintf("%s-%d", SECRET_NAME, rv-1)
 	secret, err := s.Get(previousSecret, metav1.GetOptions{})
 	if err == nil {
 		return secret, nil
