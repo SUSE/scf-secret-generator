@@ -13,7 +13,6 @@ import (
 	"github.com/SUSE/scf-secret-generator/util"
 
 	v1 "k8s.io/api/core/v1"
-	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -68,7 +67,7 @@ func UpdateSecrets(s secretInterface, secrets *v1.Secret) {
 	log.Printf("Created `%s`\n", secrets.Name)
 }
 
-func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret, error) {
+func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret) {
 	// Args: rv is the current release revision.
 	// Logic
 	// (1) if rv-2 exists, delete it (prevent leaking of too many old entities)
@@ -86,22 +85,20 @@ func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret, error) {
 	previousSecret := fmt.Sprintf("%s-%d", SECRET_NAME, rv-1)
 	secret, err := s.Get(previousSecret, metav1.GetOptions{})
 	if err == nil {
-		return secret, nil
+		return secret
 	}
 
 	// (3) Take unversioned secret, should we have it.
 	secret, err = s.Get(SECRET_NAME, metav1.GetOptions{})
 	if err == nil {
-		return secret, nil
+		return secret
 	}
 
-	// (4) Neither R-1 nor unversioned available. Bail out.
-	return nil, errors.NewNotFound(v1.Resource("secret"), previousSecret)
+	// (4) Neither R-1 nor unversioned available.
+	return nil
 }
 
 func CreateSecrets(s secretInterface) (secrets, updates *v1.Secret) {
-	secretUpdateName := SECRET_UPDATE_NAME
-	secretName := SECRET_NAME
 	releaseRevision := getEnv("RELEASE_REVISION")
 
 	if releaseRevision == "" {
@@ -115,8 +112,8 @@ func CreateSecrets(s secretInterface) (secrets, updates *v1.Secret) {
 		return nil, nil
 	}
 
-	secretUpdateName += "-" + releaseRevision
-	secretName += "-" + releaseRevision
+	secretUpdateName := fmt.Sprintf("%s-%s", SECRET_UPDATE_NAME, releaseRevision)
+	secretName := fmt.Sprintf("%s-%s", SECRET_NAME, releaseRevision)
 
 	log.Printf("Checking for chart-provided `%s`\n", secretUpdateName)
 
@@ -138,12 +135,7 @@ func CreateSecrets(s secretInterface) (secrets, updates *v1.Secret) {
 	log.Println("Checking for previous secret")
 
 	// Check for existing secret to use as baseline
-	previousSecrets, err := FindPreviousSecret(s, rv)
-	if err != nil && !errors.IsNotFound(err) {
-		logFatal(err)
-		return nil, nil
-	}
-	// Here: err == nil || errors.IsNotFound(err)
+	previousSecrets := FindPreviousSecret(s, rv)
 	if previousSecrets != nil {
 		log.Printf("Importing previous secret `%s`\n", previousSecrets.Name)
 		secrets.Data = previousSecrets.Data
