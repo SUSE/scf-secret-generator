@@ -81,15 +81,19 @@ func (m *MockSecretInterface) Update(secret *v1.Secret) (*v1.Secret, error) {
 }
 
 func (m *MockSecretInterfaceMissing) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
+	// (*missing*)
 	m.Called(name, options)
 
 	if name == SECRET_NAME {
+		// (*missing--a*)
 		resource := schema.GroupResource{}
 		return nil, k8serrors.NewNotFound(resource, "")
 	} else if name == SECRET_NAME+"-2" {
+		// (*missing--b*)
 		resource := schema.GroupResource{}
 		return nil, k8serrors.NewNotFound(resource, "")
 	} else {
+		// (*missing--c*)
 		secret := v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
 				Name: SECRET_NAME,
@@ -275,7 +279,7 @@ func TestCreateWithValidSecrets(t *testing.T) {
 			"Mocked secrets contain their name as a secret value")
 	})
 
-	t.Run("Missing secret should return IsNotFound and create a secret", func(t *testing.T) {
+	t.Run("Missing secret (neither versioned nor unversioned) should create a secret", func(t *testing.T) {
 		var sMissing MockSecretInterfaceMissing
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
@@ -285,10 +289,16 @@ func TestCreateWithValidSecrets(t *testing.T) {
 			return "3"
 		}
 
+		// See (*missing*) for the relevant implementation of Get
+
 		sMissing.On("Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
+		// Found (*missing--c*)
 		sMissing.On("Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
+		// Attempted, ok/error ignored
 		sMissing.On("Get", SECRET_NAME+"-2", metav1.GetOptions{})
+		// Not found (*missing--a*)
 		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
+		// Not found (*missing--b*)
 
 		secrets, updates := CreateSecrets(&sMissing)
 
