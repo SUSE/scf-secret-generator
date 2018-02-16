@@ -2,6 +2,7 @@ package ssl
 
 import (
 	"fmt"
+	glog "log"
 	"os"
 	"time"
 
@@ -64,6 +65,8 @@ func GenerateCerts(secrets, updates *v1.Secret) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if info.IsAuthority {
+			glog.Printf("- SSL CA: %s\n", id)
+
 			createCA(secrets, updates, id)
 		}
 	}
@@ -71,6 +74,9 @@ func GenerateCerts(secrets, updates *v1.Secret) {
 		if info.IsAuthority {
 			continue
 		}
+
+		glog.Printf("- SSL CRT: %s\n", id)
+
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
@@ -111,7 +117,6 @@ func createCAImpl(secrets, updates *v1.Secret, id string) {
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
-	util.MarkAsDirty(secrets)
 
 	certInfo[id] = info
 }
@@ -212,7 +217,6 @@ func createCertImpl(secrets, updates *v1.Secret, id string) {
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
-	util.MarkAsDirty(secrets)
 	certInfo[id] = info
 }
 
@@ -226,7 +230,6 @@ func updateCertImpl(secrets, updates *v1.Secret, id string) bool {
 		}
 		secrets.Data[info.PrivateKeyName] = updates.Data[info.PrivateKeyName]
 		secrets.Data[info.CertificateName] = updates.Data[info.CertificateName]
-		util.MarkAsDirty(secrets)
 
 		// keep cert info in case this is a CA
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]

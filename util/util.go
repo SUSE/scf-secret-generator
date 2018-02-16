@@ -6,12 +6,7 @@ import (
 	"os"
 	"strings"
 	"text/template"
-
-	"k8s.io/api/core/v1"
 )
-
-// Key used to show that the secrets have been modified
-const DIRTY_SECRET = "this-secret-is-dirty"
 
 var env map[string]string
 
@@ -43,17 +38,4 @@ func ExpandEnvTemplates(str string) string {
 	buf := &bytes.Buffer{}
 	t.Execute(buf, env)
 	return buf.String()
-}
-
-func IsDirty(secrets *v1.Secret) bool {
-	_, exists := secrets.Data[DIRTY_SECRET]
-	return exists
-}
-
-func MarkAsClean(secrets *v1.Secret) {
-	delete(secrets.Data, DIRTY_SECRET)
-}
-
-func MarkAsDirty(secrets *v1.Secret) {
-	secrets.Data[DIRTY_SECRET] = []byte("")
 }

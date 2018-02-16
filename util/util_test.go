@@ -6,7 +6,6 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
-	"k8s.io/api/core/v1"
 )
 
 type MockLog struct {
@@ -71,20 +70,4 @@ func TestExpandEnvTemplates(t *testing.T) {
 			"Can't parse templates in '%s': %s",
 			[]interface{}{"{{.bad", errors.New("template: :1: unclosed action")})
 	})
-}
-
-func TestDirtySecrets(t *testing.T) {
-	t.Parallel()
-
-	secrets := &v1.Secret{Data: map[string][]byte{}}
-	assert.False(t, IsDirty(secrets))
-
-	MarkAsClean(secrets)
-	assert.False(t, IsDirty(secrets))
-
-	MarkAsDirty(secrets)
-	assert.True(t, IsDirty(secrets))
-
-	MarkAsClean(secrets)
-	assert.False(t, IsDirty(secrets))
 }

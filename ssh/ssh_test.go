@@ -8,7 +8,6 @@ import (
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
-	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/stretchr/testify/assert"
 	"k8s.io/api/core/v1"
 )
@@ -27,8 +26,6 @@ func TestNewKeyIsCreated(t *testing.T) {
 	}
 
 	GenerateSSHKey(secrets, updates, key)
-
-	assert.True(t, util.IsDirty(secrets))
 
 	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
 	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
@@ -57,7 +54,6 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 	}
 
 	GenerateSSHKey(secrets, updates, key)
-	assert.False(t, util.IsDirty(secrets))
 	assert.Equal(t, fooData, secrets.Data["foo"])
 	assert.Equal(t, barData, secrets.Data["bar"])
 }
