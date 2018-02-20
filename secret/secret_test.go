@@ -248,6 +248,7 @@ func TestCreateWithValidSecrets(t *testing.T) {
 
 		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
 		s.AssertCalled(t, "Get", SECRET_NAME+"-1", metav1.GetOptions{})
+		s.AssertNotCalled(t, "Delete", SECRET_UPDATE_NAME+"-0", &metav1.DeleteOptions{})
 
 		assert.Equal(t, []byte(SECRET_NAME+"-1"), secrets.Data[SECRET_NAME+"-1"],
 			"Mocked secrets contain their name as a secret value")
