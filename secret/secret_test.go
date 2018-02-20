@@ -239,15 +239,16 @@ func TestCreateWithValidSecrets(t *testing.T) {
 			return "2"
 		}
 
+		// Delete will not be called in this context (rv == 2).
+
 		s.On("Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
-		s.On("Delete", SECRET_NAME+"-0", &metav1.DeleteOptions{})
 		s.On("Get", SECRET_NAME+"-1", metav1.GetOptions{})
 
 		secrets, _ := CreateSecrets(&s)
 
 		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
-		s.AssertCalled(t, "Delete", SECRET_NAME+"-0", &metav1.DeleteOptions{})
 		s.AssertCalled(t, "Get", SECRET_NAME+"-1", metav1.GetOptions{})
+		s.AssertNotCalled(t, "Delete", SECRET_UPDATE_NAME+"-0", &metav1.DeleteOptions{})
 
 		assert.Equal(t, []byte(SECRET_NAME+"-1"), secrets.Data[SECRET_NAME+"-1"],
 			"Mocked secrets contain their name as a secret value")

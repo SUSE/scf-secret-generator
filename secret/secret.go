@@ -77,9 +77,19 @@ func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret) {
 
 	// / / // /// ///// //////// ///////////// /////////////////////
 
-	// (1) Delete really old entity (R-2), if it exists. We do not
-	// care about errors.
-	_ = s.Delete(fmt.Sprintf("%s-%d", SECRET_NAME, rv-2), &metav1.DeleteOptions{})
+	// (1) Delete really old entity (R-2), if it exists. While we
+	// do not care about deletion errors enough to abort, we do
+	// report them. We also only try if there is a chance for it to
+	// exist (Third deployment, second upgade).
+	if (rv > 2) {
+		v2 := fmt.Sprintf("%s-%d", SECRET_NAME, rv-2)
+		err := s.Delete(v2, &metav1.DeleteOptions{})
+		if err != nil {
+			log.Printf("Deletion of old secret `%s` failed: %s\n", v2, err)
+		} else {
+			log.Printf("Deletion of old secret `%s` successful\n", v2)
+		}
+	}
 
 	// (2) Look for and take R-1
 	previousSecret := fmt.Sprintf("%s-%d", SECRET_NAME, rv-1)
