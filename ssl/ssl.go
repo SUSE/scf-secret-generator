@@ -45,10 +45,13 @@ var certInfo = make(map[string]CertInfo)
 func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	info := certInfo[configVar.Generator.ID]
 
-	if configVar.Generator.ValueType == model.ValueTypeCertificate {
+	switch configVar.Generator.ValueType {
+	case model.ValueTypeCertificate:
 		info.CertificateName = util.ConvertNameToKey(configVar.Name)
-	} else if configVar.Generator.ValueType == model.ValueTypePrivateKey {
+	case model.ValueTypePrivateKey:
 		info.PrivateKeyName = util.ConvertNameToKey(configVar.Name)
+	default:
+		glog.Printf("Invalid certificate generator value_type: %s", configVar.Generator.ValueType)
 	}
 	info.IsAuthority = (configVar.Generator.Type == model.GeneratorTypeCACertificate)
 
@@ -75,7 +78,7 @@ func GenerateCerts(secrets, updates *v1.Secret) {
 			continue
 		}
 
-		glog.Printf("- SSL CRT: %s\n", id)
+		glog.Printf("- SSL CRT: %s (%s / %s)\n", id, info.CertificateName, info.PrivateKeyName)
 
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
@@ -215,6 +218,18 @@ func createCertImpl(secrets, updates *v1.Secret, id string) {
 		return
 	}
 
+	if len(info.PrivateKeyName) == 0 {
+		logFatalf("Certificate %s created with empty private key name", id)
+	}
+	if len(info.PrivateKey) == 0 {
+		logFatalf("Certificate %s created with empty private key", id)
+	}
+	if len(info.CertificateName) == 0 {
+		logFatalf("Certificate %s created with empty certificate name", id)
+	}
+	if len(info.Certificate) == 0 {
+		logFatalf("Certificate %s created with empty certificate", id)
+	}
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 	certInfo[id] = info

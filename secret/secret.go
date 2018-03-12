@@ -62,12 +62,12 @@ func GetSecretInterface() secretInterface {
 func UpdateSecrets(s secretInterface, secrets *v1.Secret) {
 	_, err := s.Create(secrets)
 	if err != nil {
-		logFatal(err)
+		logFatal("Error creating secret %s: %s", secrets.Name, err)
 	}
 	log.Printf("Created `%s`\n", secrets.Name)
 }
 
-func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret) {
+func FindPreviousSecret(s secretInterface, rv int) *v1.Secret {
 	// Args: rv is the current release revision.
 	// Logic
 	// (1) if rv-2 exists, delete it (prevent leaking of too many old entities)
@@ -81,7 +81,7 @@ func FindPreviousSecret(s secretInterface, rv int) (*v1.Secret) {
 	// do not care about deletion errors enough to abort, we do
 	// report them. We also only try if there is a chance for it to
 	// exist (Third deployment, second upgade).
-	if (rv > 2) {
+	if rv > 2 {
 		v2 := fmt.Sprintf("%s-%d", SECRET_NAME, rv-2)
 		err := s.Delete(v2, &metav1.DeleteOptions{})
 		if err != nil {
@@ -177,6 +177,9 @@ func GenerateSecrets(manifest model.Manifest, secrets, updates *v1.Secret) {
 
 				case model.GeneratorTypeSSH:
 					recordSSHKeyInfo(sshKeys, configVar)
+
+				default:
+					log.Printf("Warning: variable %s has unknown generator type %s\n", configVar.Name, configVar.Generator.Type)
 				}
 			}
 		}
