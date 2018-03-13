@@ -9,6 +9,7 @@ import (
 )
 
 var env map[string]string
+var override map[string]string
 
 var osEnviron = os.Environ
 var logFatalf = log.Fatalf
@@ -23,6 +24,17 @@ func setupEnv() {
 		pair := strings.SplitN(e, "=", 2)
 		env[pair[0]] = pair[1]
 	}
+	override = make(map[string]string)
+}
+
+// OverrideEnv adds an environment override for testing purposes
+func OverrideEnv(key, value string) {
+	override[key] = value
+}
+
+// ClearOverrides removes any existing overridden environment variables
+func ClearOverrides() {
+	override = make(map[string]string)
 }
 
 func ConvertNameToKey(name string) string {
@@ -36,6 +48,13 @@ func ExpandEnvTemplates(str string) string {
 		return ""
 	}
 	buf := &bytes.Buffer{}
-	t.Execute(buf, env)
+	mapping := make(map[string]string)
+	for k, v := range env {
+		mapping[k] = v
+	}
+	for k, v := range override {
+		mapping[k] = v
+	}
+	t.Execute(buf, mapping)
 	return buf.String()
 }

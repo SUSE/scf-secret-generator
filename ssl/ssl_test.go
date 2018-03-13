@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
+	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/cloudflare/cfssl/csr"
 	cferr "github.com/cloudflare/cfssl/errors"
 	"github.com/stretchr/testify/assert"
@@ -574,6 +575,10 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		updates := &v1.Secret{Data: map[string][]byte{}}
 
+		defer util.ClearOverrides()
+		util.OverrideEnv("KUBERNETES_NAMESPACE", "namespace")
+		util.OverrideEnv("KUBE_SERVICE_DOMAIN_SUFFIX", "invalid")
+
 		certInfo[DEFAULT_CA] = defaultCA
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
@@ -592,9 +597,9 @@ func TestCreateCert(t *testing.T) {
 		}
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
 		if assert.NoError(t, err) {
-			assert.Contains(t, cert.DNSNames, "dummy-role.<no value>.svc.cluster.local")
-			assert.Contains(t, cert.DNSNames, "*.dummy-role-set.<no value>.svc.cluster.local")
-			assert.Contains(t, cert.DNSNames, "dummy-role.<no value>")
+			assert.Contains(t, cert.DNSNames, "dummy-role.namespace.svc.cluster.local")
+			assert.Contains(t, cert.DNSNames, "*.dummy-role-set.namespace.svc.cluster.local")
+			assert.Contains(t, cert.DNSNames, "dummy-role.invalid")
 			assert.NotContains(t, cert.DNSNames, "dummy-role-set")
 			assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
 		}
