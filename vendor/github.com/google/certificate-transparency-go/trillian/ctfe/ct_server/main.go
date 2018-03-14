@@ -148,8 +148,7 @@ func main() {
 	// Register handlers for all the configured logs using the correct RPC
 	// client.
 	for _, c := range cfg.LogConfigs.Config {
-		setupAndRegister(ctx, clientMap[c.LogBackendName], *rpcDeadline, c)
-		if err != nil {
+		if err := setupAndRegister(ctx, clientMap[c.LogBackendName], *rpcDeadline, c); err != nil {
 			glog.Exitf("Failed to set up log instance for %+v: %v", cfg, err)
 		}
 	}
@@ -211,7 +210,8 @@ func awaitSignal(doneFn func()) {
 }
 
 func setupAndRegister(ctx context.Context, client trillian.TrillianLogClient, deadline time.Duration, cfg *configpb.LogConfig) error {
-	handlers, err := ctfe.SetUpInstance(ctx, client, cfg, deadline, prometheus.MetricFactory{})
+	opts := ctfe.InstanceOptions{Deadline: deadline, MetricFactory: prometheus.MetricFactory{}, RequestLog: new(ctfe.DefaultRequestLog)}
+	handlers, err := ctfe.SetUpInstance(ctx, client, cfg, opts)
 	if err != nil {
 		return err
 	}
