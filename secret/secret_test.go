@@ -2,18 +2,14 @@ package secret
 
 import (
 	"errors"
-	"strconv"
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
-	"github.com/SUSE/scf-secret-generator/ssh"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
 	v1 "k8s.io/api/core/v1"
-	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
-	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type MockBase struct {
@@ -53,19 +49,14 @@ func (m *MockSecretInterface) Delete(name string, options *metav1.DeleteOptions)
 func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
 	m.Called(name, options)
 
-	if name == SECRET_UPDATE_NAME+"-1" {
+	if name == LEGACY_SECRETS_NAME {
 		return nil, errors.New("missing")
-	} else	if name == SECRET_NAME+"-2" {
+	} else if name == "missing" {
 		return nil, errors.New("missing")
-	} else if name == "notfound" {
-		resource := schema.GroupResource{}
-		return nil, k8serrors.NewNotFound(resource, "")
-	} else if name == "unknownerr" {
-		return nil, errors.New("unknown")
 	} else {
 		secret := v1.Secret{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: SECRET_NAME,
+				Name: name,
 			},
 			Data: map[string][]byte{},
 		}
@@ -80,79 +71,102 @@ func (m *MockSecretInterface) Update(secret *v1.Secret) (*v1.Secret, error) {
 	return nil, nil
 }
 
-func (m *MockSecretInterfaceMissing) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
-	// (*missing*)
-	m.Called(name, options)
-
-	if name == SECRET_NAME {
-		// (*missing--a*)
-		resource := schema.GroupResource{}
-		return nil, k8serrors.NewNotFound(resource, "")
-	} else if name == SECRET_NAME+"-2" {
-		// (*missing--b*)
-		resource := schema.GroupResource{}
-		return nil, k8serrors.NewNotFound(resource, "")
-	} else {
-		// (*missing--c*)
-		secret := v1.Secret{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: SECRET_NAME,
-			},
-			Data: map[string][]byte{},
-		}
-
-		secret.Data[name] = []byte(name)
-		return &secret, nil
-	}
-}
-
-func (m *MockSecretInterfaceUnknown) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
-	m.Called(name, options)
-
-	return nil, errors.New("unknownerr")
-}
-
-type MockSecrets struct {
+type MockConfigMapInterface struct {
 	MockBase
 }
 
-func (m *MockSecrets) PassGenerate(secrets, updates *v1.Secret, secretName string) {
-	m.Called(secrets, updates, secretName)
+func (m *MockConfigMapInterface) Create(configMap *v1.ConfigMap) (*v1.ConfigMap, error) {
+	m.Called(configMap)
+	return nil, nil
 }
 
-func (m *MockSecrets) SSHKeyGenerate(secrets, updates *v1.Secret, key ssh.SSHKey) {
-	m.Called(secrets, updates, key)
+func (m *MockConfigMapInterface) Delete(name string, options *metav1.DeleteOptions) error {
+	m.Called(name, options)
+	return nil
 }
 
-func (m *MockSecrets) RecordSSHKeyInfo(keys map[string]ssh.SSHKey, configVar *model.ConfigurationVariable) {
-	m.Called(keys, configVar)
-	keys[configVar.Name] = ssh.SSHKey{}
+func (m *MockConfigMapInterface) Get(name string, options metav1.GetOptions) (*v1.ConfigMap, error) {
+	m.Called(name, options)
+	return nil, errors.New("not found")
 }
 
-func (m *MockSecrets) RecordSSLCertInfo(configVar *model.ConfigurationVariable) {
-	m.Called(configVar)
+func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap, error) {
+	m.Called(configMap)
+	return nil, nil
 }
 
-func (m *MockSecrets) GenerateSSLCerts(secrets, updates *v1.Secret) {
-	m.Called(secrets, updates)
+func TestGetSecretConfig(t *testing.T) {
+	var c MockConfigMapInterface
+	c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+	configMap := GetSecretConfig(&c)
+
+	if assert.NotNil(t, configMap) {
+		assert.Equal(t, SECRETS_CONFIGMAP_NAME, configMap.ObjectMeta.Name)
+		assert.Equal(t, LEGACY_SECRETS_NAME, configMap.Data[CURRENT_SECRETS_NAME])
+		assert.Equal(t, "0", configMap.Data[CURRENT_SECRETS_GENERATION])
+	}
 }
 
-func TestUpdateSecrets(t *testing.T) {
-	t.Parallel()
+func TestGetSecrets(t *testing.T) {
+	origLogFatal := logFatal
+	origGetEnv := getEnv
 
-	var s MockSecretInterface
-	secrets := &v1.Secret{Data: map[string][]byte{}}
+	t.Run("ConfigMap and Secrets don't exist yet", func(t *testing.T) {
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
 
-	s.On("Create", secrets).Return(nil, nil)
-	s.On("Update", secrets).Return(nil, nil)
+		var s MockSecretInterface
+		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
+		secrets := GetSecrets(&s, configMap)
 
-	UpdateSecrets(&s, secrets)
+		if assert.NotNil(t, secrets) {
+			assert.Equal(t, "", secrets.ObjectMeta.Name)
+		}
+		// Current secrets name being empty signals that the config map must be created, not updated
+		assert.Equal(t, "", configMap.Data[CURRENT_SECRETS_NAME])
+	})
 
-	s.AssertCalled(t, "Create", secrets)
-	s.AssertNotCalled(t, "Update", secrets)
+	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
+		configMap.Data[CURRENT_SECRETS_NAME] = "missing"
+
+		var s MockSecretInterface
+		s.On("Get", "missing", metav1.GetOptions{})
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+		mockLog.On("Fatal", []interface{}{"Cannot get previous version of secrets using name 'missing'."})
+
+		secrets := GetSecrets(&s, configMap)
+
+		assert.Nil(t, secrets)
+	})
+
+	t.Run("ConfigMap names current secret that does exist", func(t *testing.T) {
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
+		configMap.Data[CURRENT_SECRETS_NAME] = "current-secret"
+
+		var s MockSecretInterface
+		s.On("Get", "current-secret", metav1.GetOptions{})
+		secrets := GetSecrets(&s, configMap)
+
+		if assert.NotNil(t, secrets) {
+			assert.Equal(t, "current-secret", secrets.ObjectMeta.Name)
+		}
+	})
 }
 
-func TestCreateWithValidSecrets(t *testing.T) {
+func TestGenerateSecrets(t *testing.T) {
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 	defer func() {
@@ -160,242 +174,47 @@ func TestCreateWithValidSecrets(t *testing.T) {
 		getEnv = origGetEnv
 	}()
 
-	t.Run("Missing RELEASE_VERSION should logFatal", func(t *testing.T) {
-		var s MockSecretInterface
+	t.Run("Missing KUBE_SECRETS_GENERATION_COUNTER should logFatal", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
 
 		getEnv = func(ev string) string {
-			// RELEASE_VERSION
+			// KUBE_SECRETS_GENERATION_COUNTER
 			return ""
 		}
 
-		mockLog.On("Fatal", []interface{}{"RELEASE_REVISION is missing or empty."})
-		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
 
-		_, _ = CreateSecrets(&s)
-
-		s.AssertNotCalled(t, "Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		mockLog.AssertCalled(t, "Fatal", []interface{}{"RELEASE_REVISION is missing or empty."})
-	})
-
-	t.Run("Non-integer RELEASE_VERSION should logFatal", func(t *testing.T) {
 		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
+		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
+		secrets := GetSecrets(&s, configMap)
 
-		getEnv = func(ev string) string {
-			// RELEASE_VERSION
-			return "foo"
-		}
-
-		invalidSyntaxError := strconv.NumError{
-			Func: "Atoi",
-			Num: "foo",
-			Err: errors.New("invalid syntax"),
-		}
-
-		mockLog.On("Fatal", []interface{}{&invalidSyntaxError})
-		s.On("Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
-
-		_, _ = CreateSecrets(&s)
-
-		s.AssertNotCalled(t, "Get", SECRET_UPDATE_NAME, metav1.GetOptions{})
-		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		mockLog.AssertCalled(t, "Fatal", []interface{}{&invalidSyntaxError})
-	})
-
-	t.Run("Missing `secret-updates` should logFatal", func(t *testing.T) {
-		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			// RELEASE_VERSION
-			return "1"
-		}
-
-		mockLog.On("Fatal", []interface{}{errors.New("missing")})
-		s.On("Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
-
-		_, _ = CreateSecrets(&s)
-
-		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
-		s.AssertNotCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("missing")})
-	})
-
-	t.Run("Valid secret-updates should append revision to the secrets requested, call Get and return the SECRET_NAME", func(t *testing.T) {
-		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			// RELEASE_VERSION
-			return "2"
-		}
-
-		// Delete will not be called in this context (rv == 2).
-
-		s.On("Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
-		s.On("Get", SECRET_NAME+"-1", metav1.GetOptions{})
-
-		secrets, _ := CreateSecrets(&s)
-
-		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-2", metav1.GetOptions{})
-		s.AssertCalled(t, "Get", SECRET_NAME+"-1", metav1.GetOptions{})
-		s.AssertNotCalled(t, "Delete", SECRET_UPDATE_NAME+"-0", &metav1.DeleteOptions{})
-
-		assert.Equal(t, []byte(SECRET_NAME+"-1"), secrets.Data[SECRET_NAME+"-1"],
-			"Mocked secrets contain their name as a secret value")
-	})
-
-	t.Run("Should fall back to plain SECRET_NAME when no versioned SECRET_NAME available", func(t *testing.T) {
-		var s MockSecretInterface
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			// RELEASE_VERSION
-			return "3"
-		}
-
-		s.On("Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
-		s.On("Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
-		s.On("Get", SECRET_NAME+"-2", metav1.GetOptions{})
-		s.On("Get", SECRET_NAME, metav1.GetOptions{})
-
-		secrets, _ := CreateSecrets(&s)
-
-		s.AssertCalled(t, "Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
-		s.AssertCalled(t, "Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
-		s.AssertCalled(t, "Get", SECRET_NAME+"-2", metav1.GetOptions{})
-		s.AssertCalled(t, "Get", SECRET_NAME, metav1.GetOptions{})
-
-		assert.Equal(t, []byte(SECRET_NAME), secrets.Data[SECRET_NAME],
-			"Mocked secrets contain their name as a secret value")
-	})
-
-	t.Run("Missing secret (neither versioned nor unversioned) should create a secret", func(t *testing.T) {
-		var sMissing MockSecretInterfaceMissing
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			// RELEASE_VERSION
-			return "3"
-		}
-
-		// See (*missing*) for the relevant implementation of Get
-
-		sMissing.On("Get", SECRET_UPDATE_NAME+"-3", metav1.GetOptions{})
-		// Found (*missing--c*)
-		sMissing.On("Delete", SECRET_NAME+"-1", &metav1.DeleteOptions{})
-		// Attempted, ok/error ignored
-		sMissing.On("Get", SECRET_NAME+"-2", metav1.GetOptions{})
-		// Not found (*missing--a*)
-		sMissing.On("Get", SECRET_NAME, metav1.GetOptions{})
-		// Not found (*missing--b*)
-
-		secrets, updates := CreateSecrets(&sMissing)
-
-		assert.NotNil(t, secrets)
-		assert.NotNil(t, updates)
-	})
-
-	t.Run("Unrelated Get error for SECRET_UPDATE_NAME should logFatal", func(t *testing.T) {
-		var sUnknown MockSecretInterfaceUnknown
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(string) string {
-			return "1"
-		}
-
-		mockLog.On("Fatal", []interface{}{errors.New("unknownerr")})
-		sUnknown.On("Get", SECRET_UPDATE_NAME+"-1", metav1.GetOptions{})
-
-		_, _ = CreateSecrets(&sUnknown)
-
-		mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("unknownerr")})
-	})
-}
-
-func TestGenerateSecretsWithNoSecrets(t *testing.T) {
-	origPassGenerate := passGenerate
-	origSshKeyGenerate := sshKeyGenerate
-	origRecordSSHKeyInfo := recordSSHKeyInfo
-	origRecordSSLCertInfo := recordSSLCertInfo
-	origGenerateSSLCerts := generateSSLCerts
-
-	defer func() {
-		passGenerate = origPassGenerate
-		sshKeyGenerate = origSshKeyGenerate
-		recordSSHKeyInfo = origRecordSSHKeyInfo
-		recordSSLCertInfo = origRecordSSLCertInfo
-		generateSSLCerts = origGenerateSSLCerts
-	}()
-
-	t.Run("Passwords are updated", func(t *testing.T) {
+		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_COUNTER is missing or empty."})
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "dirty",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
-					},
+					{},
 				},
 			},
 		}
+		GenerateSecrets(manifest, secrets, configMap)
 
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		passGenerate = mockSecrets.PassGenerate
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("PassGenerate", secrets, updates, "dirty")
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "PassGenerate", secrets, updates, "dirty")
+		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_COUNTER is missing or empty."})
 	})
 
-	t.Run("Existing passwords aren't updated", func(t *testing.T) {
-		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "clean",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
-					},
-				},
-			},
-		}
+	getEnv = func(ev string) string {
+		// KUBE_SECRETS_GENERATION_COUNTER
+		return "1"
+	}
 
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		passGenerate = mockSecrets.PassGenerate
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("PassGenerate", secrets, updates, "clean")
-
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "PassGenerate", secrets, updates, "clean")
-	})
-
-	t.Run("Non-generated secrets aren't updated", func(t *testing.T) {
+	t.Run("Non-generated secrets are removed", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
@@ -407,42 +226,15 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 			},
 		}
 
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		secrets := &v1.Secret{Data: map[string][]byte{"non-generated": []byte("obsolete")}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertNotCalled(t, "GenerateSSLCerts", secrets, updates, "clean")
+		assert.Equal(t, []byte("obsolete"), secrets.Data["non-generated"])
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.Empty(t, secrets.Data["non-generated"])
 	})
 
-	t.Run("Non-generated updates are written to secrets", func(t *testing.T) {
-		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "NON_GENERATED",
-						Secret: true,
-					},
-				},
-			},
-		}
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		updates.Data["non-generated"] = []byte("password")
-
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-
-		GenerateSecrets(manifest, secrets, updates)
-		assert.Equal(t, []byte("password"), secrets.Data["non-generated"])
-	})
-
-	t.Run("An updated SSH key is generated", func(t *testing.T) {
+	t.Run("New passwords is generated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
@@ -450,7 +242,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 						Name:   "dirty",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeSSH,
+							Type: model.GeneratorTypePassword,
 						},
 					},
 				},
@@ -458,21 +250,14 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		recordSSHKeyInfo = mockSecrets.RecordSSHKeyInfo
-		sshKeyGenerate = mockSecrets.SSHKeyGenerate
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
-		mockSecrets.On("SSHKeyGenerate", secrets, updates, ssh.SSHKey{}).Return(true)
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "SSHKeyGenerate", secrets, updates, ssh.SSHKey{})
-		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"dirty": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+		assert.Empty(t, secrets.Data["dirty"])
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.NotEmpty(t, secrets.Data["dirty"])
 	})
 
-	t.Run("An SSH key that doesn't need to be generated isn't updated", func(t *testing.T) {
+	t.Run("Existing passwords isn't updated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
@@ -480,7 +265,7 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 						Name:   "clean",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeSSH,
+							Type: model.GeneratorTypePassword,
 						},
 					},
 				},
@@ -488,29 +273,33 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		recordSSHKeyInfo = mockSecrets.RecordSSHKeyInfo
-		sshKeyGenerate = mockSecrets.SSHKeyGenerate
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSHKeyInfo", map[string]ssh.SSHKey{}, manifest.Configuration.Variables[0])
-		mockSecrets.On("SSHKeyGenerate", secrets, updates, ssh.SSHKey{}).Return(false)
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "SSHKeyGenerate", secrets, updates, ssh.SSHKey{})
-		mockSecrets.AssertCalled(t, "RecordSSHKeyInfo", map[string]ssh.SSHKey{"clean": ssh.SSHKey{}}, manifest.Configuration.Variables[0])
+		secrets.Data["clean"] = []byte("clean")
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
 
-	t.Run("An SSL CA cert is updated", func(t *testing.T) {
+	t.Run("New SSH key is generated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
 					{
-						Name:   "dirty",
+						Name:   "ssh-key",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeCACertificate,
+							ID:        "ssh-key",
+							Type:      model.GeneratorTypeSSH,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+					{
+						Name:   "ssh-key-fingerprint",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "ssh-key",
+							Type:      model.GeneratorTypeSSH,
+							ValueType: model.ValueTypeFingerprint,
 						},
 					},
 				},
@@ -518,27 +307,35 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		mockSecrets.AssertCalled(t, "GenerateSSLCerts", secrets, updates)
+		assert.Empty(t, secrets.Data["ssh-key"])
+		assert.Empty(t, secrets.Data["ssh-key-fingerprint"])
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.NotEmpty(t, secrets.Data["ssh-key"])
+		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
 	})
 
-	t.Run("An SSL CA cert that isn't updated is unchanged", func(t *testing.T) {
+	t.Run("Existing SSH key isn't updated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
 					{
-						Name:   "clean",
+						Name:   "ssh-key",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeCACertificate,
+							ID:        "ssh-key",
+							Type:      model.GeneratorTypeSSH,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+					{
+						Name:   "ssh-key-fingerprint",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "ssh-key",
+							Type:      model.GeneratorTypeSSH,
+							ValueType: model.ValueTypeFingerprint,
 						},
 					},
 				},
@@ -546,27 +343,37 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		mockSecrets.AssertCalled(t, "GenerateSSLCerts", secrets, updates)
+		secrets.Data["ssh-key"] = []byte("key")
+		secrets.Data["ssh-key-fingerprint"] = []byte("fingerprint")
+
+		GenerateSecrets(manifest, secrets, configMap)
+
+		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
+		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key-fingerprint"])
 	})
 
-	t.Run("An SSL cert is updated", func(t *testing.T) {
+	t.Run("New SSL CA is generated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
 					{
-						Name:   "dirty",
+						Name:   "ca-cert",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeCertificate,
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ca-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypePrivateKey,
 						},
 					},
 				},
@@ -574,27 +381,35 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		mockSecrets.AssertCalled(t, "GenerateSSLCerts", secrets, updates)
+		assert.Empty(t, secrets.Data["ca-cert"])
+		assert.Empty(t, secrets.Data["ca-key"])
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.NotEmpty(t, secrets.Data["ca-cert"])
+		assert.NotEmpty(t, secrets.Data["ca-key"])
 	})
 
-	t.Run("An SSL cert that isn't updated is unchanged", func(t *testing.T) {
+	t.Run("Existing SSL CA isn't updated", func(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
 					{
-						Name:   "clean",
+						Name:   "ca-cert",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypeCertificate,
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ca-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypePrivateKey,
 						},
 					},
 				},
@@ -602,62 +417,87 @@ func TestGenerateSecretsWithNoSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		var mockSecrets MockSecrets
-		generateSSLCerts = mockSecrets.GenerateSSLCerts
-		recordSSLCertInfo = mockSecrets.RecordSSLCertInfo
-		mockSecrets.On("GenerateSSLCerts", secrets, updates)
-		mockSecrets.On("RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		GenerateSecrets(manifest, secrets, updates)
-		mockSecrets.AssertCalled(t, "RecordSSLCertInfo", manifest.Configuration.Variables[0])
-		mockSecrets.AssertCalled(t, "GenerateSSLCerts", secrets, updates)
+		secrets.Data["ca-cert"] = []byte("cert")
+		secrets.Data["ca-key"] = []byte("key")
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
+		assert.Equal(t, []byte("key"), secrets.Data["ca-key"])
 	})
-}
 
-func TestUpdateVariable(t *testing.T) {
-	t.Run("NameInUpdatesButNotSecrets", func(t *testing.T) {
-		t.Parallel()
+	t.Run("New SSL cert is generated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "ssl-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ssl-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+				},
+			},
+		}
 
-		// If `name` is in updates but not secrets, the secret should be updated
 		secrets := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		update := &v1.Secret{Data: map[string][]byte{}}
-		update.Data["not-in-secrets"] = []byte("value1")
-
-		configVar := &model.ConfigurationVariable{Name: "NOT_IN_SECRETS"}
-		updateVariable(secrets, update, configVar)
-		assert.Equal(t, "value1", string(secrets.Data["not-in-secrets"]))
+		assert.Empty(t, secrets.Data["ssl-cert"])
+		assert.Empty(t, secrets.Data["ssl-key"])
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.NotEmpty(t, secrets.Data["ssl-cert"])
+		assert.NotEmpty(t, secrets.Data["ssl-key"])
 	})
 
-	t.Run("NameNotInUpdates", func(t *testing.T) {
-		t.Parallel()
+	t.Run("Existing SSL cert isn't updated", func(t *testing.T) {
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "ssl-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ssl-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+				},
+			},
+		}
 
-		// If `name` isn't in updates, don't do anything
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		secrets.Data["not-in-updates"] = []byte("value2")
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
 
-		update := &v1.Secret{Data: map[string][]byte{}}
-
-		configVar := &model.ConfigurationVariable{Name: "NOT_IN_UPDATES"}
-		updateVariable(secrets, update, configVar)
-		assert.Equal(t, "value2", string(secrets.Data["not-in-updates"]))
+		secrets.Data["ssl-cert"] = []byte("cert")
+		secrets.Data["ssl-key"] = []byte("key")
+		GenerateSecrets(manifest, secrets, configMap)
+		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
+		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 	})
 
-	t.Run("NameInUpdatesAndSecrets", func(t *testing.T) {
-		t.Parallel()
-
-		// If `name` is in secrets, don't do anything
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		secrets.Data["in-updates"] = []byte("orig")
-
-		update := &v1.Secret{Data: map[string][]byte{}}
-		update.Data["in-updates"] = []byte("changed")
-
-		configVar := &model.ConfigurationVariable{Name: "IN_UPDATES"}
-		updateVariable(secrets, update, configVar)
-		assert.Equal(t, "orig", string(secrets.Data["in-updates"]))
-	})
 }
 
 func TestMigrateRenamedVariable(t *testing.T) {
@@ -732,5 +572,159 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
+	})
+}
+
+func TestUpdateSecrets(t *testing.T) {
+	t.Parallel()
+
+	origLogFatal := logFatal
+	origGetEnv := getEnv
+	defer func() {
+		logFatal = origLogFatal
+		getEnv = origGetEnv
+	}()
+
+	t.Run("Missing KUBE_SECRETS_GENERATION_NAME should logFatal", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return ""
+		}
+
+		var s MockSecretInterface
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+
+		var c MockConfigMapInterface
+		configMap := &v1.ConfigMap{Data: map[string]string{}}
+
+		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
+		UpdateSecrets(&s, secrets, &c, configMap)
+
+		s.AssertNotCalled(t, "Create", secrets)
+		s.AssertNotCalled(t, "Update", secrets)
+
+		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
+	})
+
+	t.Run("ConfigMap has no current secret", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
+
+		var s MockSecretInterface
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		s.On("Create", secrets)
+		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		var c MockConfigMapInterface
+		configMap := &v1.ConfigMap{Data: map[string]string{}}
+		c.On("Create", configMap)
+		c.On("Update", configMap)
+		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		UpdateSecrets(&s, secrets, &c, configMap)
+
+		s.AssertCalled(t, "Create", secrets)
+		s.AssertNotCalled(t, "Update", secrets)
+		s.AssertNotCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		c.AssertCalled(t, "Create", configMap)
+		c.AssertNotCalled(t, "Update", configMap)
+
+		mockLog.AssertNotCalled(t, "Fatal")
+	})
+
+	t.Run("ConfigMap has current secret but not previous secret", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
+
+		var s MockSecretInterface
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		s.On("Create", secrets)
+		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		var c MockConfigMapInterface
+		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_NAME: LEGACY_SECRETS_NAME}}
+		c.On("Create", configMap)
+		c.On("Update", configMap)
+		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		UpdateSecrets(&s, secrets, &c, configMap)
+
+		s.AssertCalled(t, "Create", secrets)
+		s.AssertNotCalled(t, "Update", secrets)
+		s.AssertNotCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		c.AssertNotCalled(t, "Create", configMap)
+		c.AssertCalled(t, "Update", configMap)
+
+		mockLog.AssertNotCalled(t, "Fatal")
+	})
+
+	t.Run("ConfigMap has current and previous secret", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
+
+		var s MockSecretInterface
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		s.On("Create", secrets)
+		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		var c MockConfigMapInterface
+		configMap := &v1.ConfigMap{Data: map[string]string{
+			CURRENT_SECRETS_NAME:  "current-secret",
+			PREVIOUS_SECRETS_NAME: LEGACY_SECRETS_NAME,
+		}}
+		c.On("Create", configMap)
+		c.On("Update", configMap)
+		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		UpdateSecrets(&s, secrets, &c, configMap)
+
+		s.AssertCalled(t, "Create", secrets)
+		s.AssertNotCalled(t, "Update", secrets)
+		s.AssertCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+
+		c.AssertNotCalled(t, "Create", configMap)
+		c.AssertCalled(t, "Update", configMap)
+
+		mockLog.AssertNotCalled(t, "Fatal")
 	})
 }

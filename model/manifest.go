@@ -65,6 +65,7 @@ type ConfigurationVariable struct {
 	Internal      bool                            `yaml:"internal,omitempty"`
 	Secret        bool                            `yaml:"secret,omitempty"`
 	Required      bool                            `yaml:"required,omitempty"`
+	Immutable     bool                            `yaml:"immutable,omitempty"`
 }
 
 // CVType is the type of the configuration variable; see the constants below

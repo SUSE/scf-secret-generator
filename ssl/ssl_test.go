@@ -33,17 +33,12 @@ type MockSSL struct {
 	MockBase
 }
 
-func (m *MockSSL) createCA(secrets, updates *v1.Secret, id string) {
-	m.Called(secrets, updates, id)
+func (m *MockSSL) createCA(secrets *v1.Secret, id string) {
+	m.Called(secrets, id)
 }
 
-func (m *MockSSL) createCert(secrets, updates *v1.Secret, id string) {
-	m.Called(secrets, updates, id)
-}
-
-func (m *MockSSL) updateCert(secrets, updates *v1.Secret, id string) bool {
-	results := m.Called(secrets, updates, id)
-	return results.Bool(0)
+func (m *MockSSL) createCert(secrets *v1.Secret, id string) {
+	m.Called(secrets, id)
 }
 
 func TestRecordCertInfo(t *testing.T) {
@@ -154,19 +149,18 @@ func TestGenerateCerts(t *testing.T) {
 		certInfo = make(map[string]CertInfo)
 		certInfo[CERT_ID] = CertInfo{IsAuthority: true}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCA returns true
-		mockSSL.On("createCA", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCA", secrets, updates, CERT_ID)
+		mockSSL.On("createCA", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCA", secrets, CERT_ID)
 
 		// When createCA returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCA", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCA", secrets, updates, CERT_ID)
+		mockSSL.On("createCA", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCA", secrets, CERT_ID)
 	})
 
 	t.Run("Check createCert is called properly when SubjectNames specified", func(t *testing.T) {
@@ -181,19 +175,18 @@ func TestGenerateCerts(t *testing.T) {
 			SubjectNames: []string{"subject"},
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 	})
 
@@ -209,19 +202,18 @@ func TestGenerateCerts(t *testing.T) {
 			RoleName: "rolename",
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 	})
 
@@ -238,19 +230,18 @@ func TestGenerateCerts(t *testing.T) {
 			SubjectNames: []string{"subject"},
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 	})
 
 	t.Run("Check createCert is called properly when neither SubjectNames nor RoleNames specified", func(t *testing.T) {
@@ -266,19 +257,18 @@ func TestGenerateCerts(t *testing.T) {
 			SubjectNames: []string{},
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// When createCert returns true
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 
 		// When createCert returns false
 		mockSSL.ExpectedCalls = nil
 		mockSSL.Calls = nil
-		mockSSL.On("createCert", secrets, updates, CERT_ID)
-		GenerateCerts(secrets, updates)
-		mockSSL.AssertCalled(t, "createCert", secrets, updates, CERT_ID)
+		mockSSL.On("createCert", secrets, CERT_ID)
+		GenerateCerts(secrets)
+		mockSSL.AssertCalled(t, "createCert", secrets, CERT_ID)
 	})
 }
 
@@ -290,22 +280,12 @@ func TestRsaKeyRequest(t *testing.T) {
 }
 
 func TestCreateCA(t *testing.T) {
-	origUpdateCert := updateCert
-
-	defer func() {
-		updateCert = origUpdateCert
-	}()
-
 	t.Run("createCA shouldn't update if PrivateKeyName is defined", func(t *testing.T) {
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		//
 		// If PrivateKeyName isn't blank, return false
 		//
 		certInfo = make(map[string]CertInfo)
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
@@ -315,40 +295,20 @@ func TestCreateCA(t *testing.T) {
 		secrets.Data["private-key"] = []byte("private-key-data")
 		secrets.Data["certificate-name"] = []byte("certificate-data")
 
-		createCAImpl(secrets, updates, CERT_ID)
+		createCAImpl(secrets, CERT_ID)
 
 		assert.Equal(t, []byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
 		assert.Equal(t, []byte("certificate-data"), certInfo[CERT_ID].Certificate)
 	})
 
-	t.Run("createCA should trigger an update if updateCert returns true", func(t *testing.T) {
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
-		//
-		// If updateCert() is true, return true
-		//
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		certInfo = make(map[string]CertInfo)
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(true)
-		createCAImpl(secrets, updates, CERT_ID)
-		mockSSL.AssertCalled(t, "updateCert", secrets, updates, CERT_ID)
-	})
-
 	t.Run("createCA should generate valid data", func(t *testing.T) {
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
 		}
 
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
-		createCAImpl(secrets, updates, CERT_ID)
+		createCAImpl(secrets, CERT_ID)
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 	})
@@ -376,73 +336,50 @@ func TestAddHost(t *testing.T) {
 func TestCreateCert(t *testing.T) {
 	// Initialize a default CA for later use in this test
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	certInfo = make(map[string]CertInfo)
-	createCAImpl(secrets, updates, DEFAULT_CA)
+	createCAImpl(secrets, DEFAULT_CA)
 	defaultCA := certInfo[DEFAULT_CA]
-
-	origLogFatalf := logFatalf
-	origUpdateCert := updateCert
-	defer func() {
-		logFatalf = origLogFatalf
-		updateCert = origUpdateCert
-	}()
 
 	t.Run("If secrets has a private key, return false", func(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["private-key"] = []byte("private-key-data")
 		secrets.Data["certificate-name"] = []byte("certificate-data")
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
 		}
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 	})
 
 	t.Run("If updateCert() is true, return true", func(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
 		}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(true)
-		createCertImpl(secrets, updates, CERT_ID)
-		mockSSL.AssertCalled(t, "updateCert", secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 	})
 
 	t.Run("If the default CA private key isn't found, logFatalf", func(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		certInfo[DEFAULT_CA] = CertInfo{
 			Certificate: []byte("default-certificate"),
 		}
 		mockLog.On("Fatalf",
 			"CA %s not found",
 			[]interface{}{DEFAULT_CA})
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		mockLog.AssertCalled(t, "Fatalf",
 			"CA %s not found",
 			[]interface{}{DEFAULT_CA})
@@ -453,19 +390,14 @@ func TestCreateCert(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		certInfo[DEFAULT_CA] = CertInfo{
 			PrivateKey: []byte("private-key"),
 		}
 		mockLog.On("Fatalf",
 			"CA %s not found",
 			[]interface{}{DEFAULT_CA})
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		mockLog.AssertCalled(t, "Fatalf",
 			"CA %s not found",
 			[]interface{}{DEFAULT_CA})
@@ -476,11 +408,7 @@ func TestCreateCert(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// Create a bogus default CA
 		certInfo[DEFAULT_CA] = CertInfo{
@@ -492,11 +420,10 @@ func TestCreateCert(t *testing.T) {
 			CertificateName: "certificate-name",
 			SubjectNames:    []string{"subject-names"},
 		}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		mockLog.On("Fatalf",
 			"Cannot parse CA cert: %s",
 			[]interface{}{cferr.New(1000, 2)})
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		mockLog.AssertCalled(t, "Fatalf",
 			"Cannot parse CA cert: %s",
 			[]interface{}{cferr.New(1000, 2)})
@@ -507,11 +434,7 @@ func TestCreateCert(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		// Invalidate the private key of the default CA
 		info := defaultCA
@@ -522,11 +445,10 @@ func TestCreateCert(t *testing.T) {
 			CertificateName: "certificate-name",
 			SubjectNames:    []string{"subject-names"},
 		}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
 		mockLog.On("Fatalf",
 			"Cannot parse CA private key: %s",
 			[]interface{}{cferr.New(2000, 2)})
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		mockLog.AssertCalled(t, "Fatalf",
 			"Cannot parse CA private key: %s",
 			[]interface{}{cferr.New(2000, 2)})
@@ -537,19 +459,14 @@ func TestCreateCert(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 		certInfo[DEFAULT_CA] = defaultCA
 		certInfo[CERT_ID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
 			SubjectNames:    []string{"subject-names"},
 		}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[CERT_ID].CertificateName], []byte{})
 		_, err := tls.X509KeyPair(secrets.Data[certInfo[CERT_ID].CertificateName],
@@ -562,9 +479,6 @@ func TestCreateCert(t *testing.T) {
 		var mockLog MockLog
 		logFatalf = mockLog.Fatalf
 
-		var mockSSL MockSSL
-		updateCert = mockSSL.updateCert
-
 		origGetEnv := getEnv
 		defer func() {
 			getEnv = origGetEnv
@@ -573,7 +487,6 @@ func TestCreateCert(t *testing.T) {
 			return "2"
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
 
 		defer util.ClearOverrides()
 		util.OverrideEnv("KUBERNETES_NAMESPACE", "namespace")
@@ -586,8 +499,7 @@ func TestCreateCert(t *testing.T) {
 			SubjectNames:    []string{},
 			RoleName:        "dummy-role",
 		}
-		mockSSL.On("updateCert", secrets, updates, CERT_ID).Return(false)
-		createCertImpl(secrets, updates, CERT_ID)
+		createCertImpl(secrets, CERT_ID)
 		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].PrivateKeyName])
 		assert.NotEmpty(t, secrets.Data[certInfo[CERT_ID].CertificateName])
 
@@ -603,79 +515,5 @@ func TestCreateCert(t *testing.T) {
 			assert.NotContains(t, cert.DNSNames, "dummy-role-set")
 			assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
 		}
-	})
-}
-
-func TestUpdateCert(t *testing.T) {
-	origLogFatalf := logFatalf
-	defer func() {
-		logFatalf = origLogFatalf
-	}()
-
-	t.Run("When updates.Data has a PrivateKeyName and a cert name, keep it", func(t *testing.T) {
-		var mockLog MockLog
-		logFatalf = mockLog.Fatalf
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		certInfo = make(map[string]CertInfo)
-		certInfo[CERT_ID] = CertInfo{
-			PrivateKeyName:  "private-key",
-			CertificateName: "certificate-name",
-		}
-
-		updates.Data["private-key"] = []byte("private-key-data")
-		updates.Data["certificate-name"] = []byte("certificate-data")
-
-		result := updateCertImpl(secrets, updates, CERT_ID)
-
-		assert.True(t, result)
-		assert.Equal(t, []byte("private-key-data"), certInfo[CERT_ID].PrivateKey)
-		assert.Equal(t, []byte("certificate-data"), certInfo[CERT_ID].Certificate)
-	})
-
-	t.Run("If updates.Data has a PrivateKeyName but doesn't have a cert name, logFatal", func(t *testing.T) {
-		var mockLog MockLog
-		logFatalf = mockLog.Fatalf
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		updates.Data["private-key"] = []byte("private-key-data")
-		mockLog.On("Fatalf",
-			"Update includes %s but not %s",
-			[]interface{}{"private-key", "certificate-name"})
-		_ = updateCertImpl(secrets, updates, CERT_ID)
-		mockLog.AssertCalled(t, "Fatalf",
-			"Update includes %s but not %s",
-			[]interface{}{"private-key", "certificate-name"})
-
-	})
-
-	t.Run("If updates.Data doesn't have a PrivateKeyName but it has a cert name, logFatal", func(t *testing.T) {
-		var mockLog MockLog
-		logFatalf = mockLog.Fatalf
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		updates.Data["certificate-name"] = []byte("certificate-data")
-		mockLog.On("Fatalf",
-			"Update includes %s but not %s",
-			[]interface{}{"certificate-name", "private-key"})
-		_ = updateCertImpl(secrets, updates, CERT_ID)
-		mockLog.AssertCalled(t, "Fatalf",
-			"Update includes %s but not %s",
-			[]interface{}{"certificate-name", "private-key"})
-
-	})
-
-	t.Run("When updates.Data doesn't have a PrivateKeyName or a cert name, return false", func(t *testing.T) {
-		var mockLog MockLog
-		logFatalf = mockLog.Fatalf
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		updates := &v1.Secret{Data: map[string][]byte{}}
-		certInfo[CERT_ID] = CertInfo{}
-		result := updateCertImpl(secrets, updates, CERT_ID)
-		assert.False(t, result)
 	})
 }

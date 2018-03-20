@@ -19,7 +19,7 @@ type SSHKey struct {
 	Fingerprint string // Name to associate with fingerprint
 }
 
-func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
+func GenerateSSHKey(secrets *v1.Secret, key SSHKey) {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
@@ -29,19 +29,6 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 	}
 
 	log.Printf("- SSH priK: %s\n", key.PrivateKey)
-
-	// Prefer user supplied update data over generating the keys ourselves
-	if len(updates.Data[secretKey]) > 0 {
-		if len(updates.Data[fingerprintKey]) == 0 {
-			log.Fatalf("Update includes %s but not %s", secretKey, fingerprintKey)
-		}
-		secrets.Data[secretKey] = updates.Data[secretKey]
-		secrets.Data[fingerprintKey] = updates.Data[fingerprintKey]
-		return
-	}
-	if len(updates.Data[fingerprintKey]) > 0 {
-		log.Fatalf("Update includes %s but not %s", fingerprintKey, secretKey)
-	}
 
 	// generate private key
 	private, err := rsa.GenerateKey(rand.Reader, 4096)

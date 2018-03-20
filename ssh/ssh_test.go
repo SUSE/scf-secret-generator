@@ -18,14 +18,13 @@ func TestNewKeyIsCreated(t *testing.T) {
 	t.Parallel()
 
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	key := SSHKey{
 		PrivateKey:  "foo",
 		Fingerprint: "bar",
 	}
 
-	GenerateSSHKey(secrets, updates, key)
+	GenerateSSHKey(secrets, key)
 
 	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
 	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
@@ -42,7 +41,6 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 	barData := []byte("bar-data")
 
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	// Also tests for FOO / foo case conversion
 	secrets.Data["foo"] = fooData
@@ -53,7 +51,7 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 		Fingerprint: "BAR",
 	}
 
-	GenerateSSHKey(secrets, updates, key)
+	GenerateSSHKey(secrets, key)
 	assert.Equal(t, fooData, secrets.Data["foo"])
 	assert.Equal(t, barData, secrets.Data["bar"])
 }

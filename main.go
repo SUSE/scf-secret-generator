@@ -20,11 +20,13 @@ func main() {
 
 	manifest := model.GetManifest(os.Args[1])
 
+	c := secret.GetConfigMapInterface()
 	s := secret.GetSecretInterface()
 
-	secrets, updates := secret.CreateSecrets(s)
+	configMap := secret.GetSecretConfig(c)
+	secrets := secret.GetSecrets(s, configMap)
 
-	secret.GenerateSecrets(manifest, secrets, updates)
+	secret.GenerateSecrets(manifest, secrets, configMap)
 
-	secret.UpdateSecrets(s, secrets)
+	secret.UpdateSecrets(s, secrets, c, configMap)
 }
