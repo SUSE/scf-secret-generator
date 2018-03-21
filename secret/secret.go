@@ -90,11 +90,25 @@ func GetSecretConfig(c configMapInterface) *v1.ConfigMap {
 }
 
 func GetSecrets(s secretInterface, configMap *v1.ConfigMap) *v1.Secret {
+	currentName := configMap.Data[CURRENT_SECRETS_NAME]
+
+	newName := getEnv("KUBE_SECRETS_GENERATION_NAME")
+	if newName == "" {
+		logFatal("KUBE_SECRETS_GENERATION_NAME is missing or empty.")
+		return nil
+	}
+	if newName == currentName {
+		log.Printf("Secret `%s` already exists; nothing to do\n", newName)
+		return nil
+	}
+
 	newSecrets := &v1.Secret{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: newName,
+		},
 		Data: map[string][]byte{},
 	}
 
-	currentName := configMap.Data[CURRENT_SECRETS_NAME]
 	currentSecrets, err := s.Get(currentName, metav1.GetOptions{})
 	if err == nil {
 		newSecrets.Data = currentSecrets.Data
@@ -187,16 +201,9 @@ func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, configMap *v1.
 }
 
 func UpdateSecrets(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) {
-	newSecretName := getEnv("KUBE_SECRETS_GENERATION_NAME")
-	if newSecretName == "" {
-		logFatal("KUBE_SECRETS_GENERATION_NAME is missing or empty.")
-		return
-	}
-
 	var obsoleteSecretName = configMap.Data[PREVIOUS_SECRETS_NAME]
 	configMap.Data[PREVIOUS_SECRETS_NAME] = configMap.Data[CURRENT_SECRETS_NAME]
-	configMap.Data[CURRENT_SECRETS_NAME] = newSecretName
-	secrets.Name = newSecretName
+	configMap.Data[CURRENT_SECRETS_NAME] = secrets.Name
 
 	// create new secret
 	_, err := s.Create(secrets)

@@ -111,7 +111,45 @@ func TestGetSecrets(t *testing.T) {
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 
+	t.Run("Missing KUBE_SECRETS_GENERATION_NAME should logFatal", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return ""
+		}
+
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
+
+		var s MockSecretInterface
+		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
+
+		_ = GetSecrets(&s, configMap)
+
+		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
+
+	})
+
 	t.Run("ConfigMap and Secrets don't exist yet", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
+
 		var c MockConfigMapInterface
 		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
@@ -121,7 +159,7 @@ func TestGetSecrets(t *testing.T) {
 		secrets := GetSecrets(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
-			assert.Empty(t, secrets.Name)
+			assert.Equal(t, "new-secret", secrets.Name)
 		}
 		// Current secrets name being empty signals that the configmap must be created, not updated
 		assert.Empty(t, configMap.Data[CURRENT_SECRETS_NAME])
@@ -132,6 +170,11 @@ func TestGetSecrets(t *testing.T) {
 			logFatal = origLogFatal
 			getEnv = origGetEnv
 		}()
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
 
 		var c MockConfigMapInterface
 		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
@@ -151,6 +194,19 @@ func TestGetSecrets(t *testing.T) {
 	})
 
 	t.Run("ConfigMap names current secret that does exist", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "new-secret"
+		}
+
 		var c MockConfigMapInterface
 		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
@@ -161,10 +217,36 @@ func TestGetSecrets(t *testing.T) {
 		secrets := GetSecrets(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
-			// Name should be empty, only Data should be copied
-			assert.Empty(t, secrets.Name)
+			assert.Equal(t, "new-secret", secrets.Name)
 			assert.Equal(t, []byte("data"), secrets.Data["dummy"])
 		}
+	})
+
+	t.Run("ConfigMap current secret is the same as KUBE_SECRETS_GENERATION_NAME", func(t *testing.T) {
+		defer func() {
+			logFatal = origLogFatal
+			getEnv = origGetEnv
+		}()
+
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
+
+		getEnv = func(ev string) string {
+			// KUBE_SECRETS_GENERATION_NAME
+			return "current-secret"
+		}
+
+		var c MockConfigMapInterface
+		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		configMap := GetSecretConfig(&c)
+		configMap.Data[CURRENT_SECRETS_NAME] = "current-secret"
+
+		var s MockSecretInterface
+		s.On("Get", "current-secret", metav1.GetOptions{})
+		secrets := GetSecrets(&s, configMap)
+		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
+
+		assert.Nil(t, secrets)
 	})
 }
 
@@ -182,10 +264,10 @@ func TestGenerateSecrets(t *testing.T) {
 			getEnv = origGetEnv
 		}()
 
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
 		getEnv = func(ev string) string {
+			if ev == "KUBE_SECRETS_GENERATION_NAME" {
+				return "new-secret"
+			}
 			// KUBE_SECRETS_GENERATION_COUNTER
 			return ""
 		}
@@ -198,7 +280,10 @@ func TestGenerateSecrets(t *testing.T) {
 		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
 		secrets := GetSecrets(&s, configMap)
 
+		var mockLog MockLog
+		logFatal = mockLog.Fatal
 		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_COUNTER is missing or empty."})
+
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
@@ -212,6 +297,9 @@ func TestGenerateSecrets(t *testing.T) {
 	})
 
 	getEnv = func(ev string) string {
+		if ev == "KUBE_SECRETS_GENERATION_NAME" {
+			return "new-secret"
+		}
 		// KUBE_SECRETS_GENERATION_COUNTER
 		return "1"
 	}
@@ -586,35 +674,6 @@ func TestUpdateSecrets(t *testing.T) {
 		logFatal = origLogFatal
 		getEnv = origGetEnv
 	}()
-
-	t.Run("Missing KUBE_SECRETS_GENERATION_NAME should logFatal", func(t *testing.T) {
-		defer func() {
-			logFatal = origLogFatal
-			getEnv = origGetEnv
-		}()
-
-		var mockLog MockLog
-		logFatal = mockLog.Fatal
-
-		getEnv = func(ev string) string {
-			// KUBE_SECRETS_GENERATION_NAME
-			return ""
-		}
-
-		var s MockSecretInterface
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-
-		var c MockConfigMapInterface
-		configMap := &v1.ConfigMap{Data: map[string]string{}}
-
-		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
-		UpdateSecrets(&s, secrets, &c, configMap)
-
-		s.AssertNotCalled(t, "Create", secrets)
-		s.AssertNotCalled(t, "Update", secrets)
-
-		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
-	})
 
 	t.Run("ConfigMap has no current secret", func(t *testing.T) {
 		defer func() {

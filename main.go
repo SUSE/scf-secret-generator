@@ -25,8 +25,8 @@ func main() {
 
 	configMap := secret.GetSecretConfig(c)
 	secrets := secret.GetSecrets(s, configMap)
-
-	secret.GenerateSecrets(manifest, secrets, configMap)
-
-	secret.UpdateSecrets(s, secrets, c, configMap)
+	if secrets != nil {
+		secret.GenerateSecrets(manifest, secrets, configMap)
+		secret.UpdateSecrets(s, secrets, c, configMap)
+	}
 }
