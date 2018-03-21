@@ -20,7 +20,7 @@ import (
 // The unversioned name of the secret used by legacy versions of the secrets generator
 const LEGACY_SECRETS_NAME = "secret"
 
-// The name of the secrets config map
+// The name of the secrets configmap
 const SECRETS_CONFIGMAP_NAME = "secrets-config"
 
 const CURRENT_SECRETS_NAME = "current-secrets-name"
@@ -90,20 +90,24 @@ func GetSecretConfig(c configMapInterface) *v1.ConfigMap {
 }
 
 func GetSecrets(s secretInterface, configMap *v1.ConfigMap) *v1.Secret {
-	name := configMap.Data[CURRENT_SECRETS_NAME]
-	secrets, err := s.Get(name, metav1.GetOptions{})
-	if err != nil {
-		if name != LEGACY_SECRETS_NAME {
-			logFatal(fmt.Sprintf("Cannot get previous version of secrets using name '%s'.", name))
-			return nil
-		}
-		configMap.Data[CURRENT_SECRETS_NAME] = ""
-		secrets = &v1.Secret{
-			Data: map[string][]byte{},
-		}
+	newSecrets := &v1.Secret{
+		Data: map[string][]byte{},
 	}
 
-	return secrets
+	currentName := configMap.Data[CURRENT_SECRETS_NAME]
+	currentSecrets, err := s.Get(currentName, metav1.GetOptions{})
+	if err == nil {
+		newSecrets.Data = currentSecrets.Data
+	} else {
+		if currentName != LEGACY_SECRETS_NAME {
+			logFatal(fmt.Sprintf("Cannot get previous version of secrets using name '%s'.", currentName))
+			return nil
+		}
+		// This is a new installation, so make sure the configmap is created, not updated
+		configMap.Data[CURRENT_SECRETS_NAME] = ""
+	}
+
+	return newSecrets
 }
 
 func GenerateSecrets(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) {
@@ -199,20 +203,22 @@ func UpdateSecrets(s secretInterface, secrets *v1.Secret, c configMapInterface, 
 	if err != nil {
 		logFatal(fmt.Sprintf("Error creating secret %s: %s", secrets.Name, err))
 	}
-	log.Printf("Created `%s`\n", secrets.Name)
+	log.Printf("Created secret `%s`\n", secrets.Name)
 
 	// update configmap
 	if configMap.Data[PREVIOUS_SECRETS_NAME] == "" {
 		_, err = c.Create(configMap)
 		if err != nil {
-			logFatal(fmt.Sprintf("Error creating config map %s: %s", configMap.Name, err))
+			logFatal(fmt.Sprintf("Error creating configmap %s: %s", configMap.Name, err))
 		}
+		log.Printf("Created configmap `%s`\n", configMap.Name)
 	} else {
 		log.Printf("previous secret `%s`\n", configMap.Data[PREVIOUS_SECRETS_NAME])
 		_, err = c.Update(configMap)
 		if err != nil {
-			logFatal(fmt.Sprintf("Error updating config map %s: %s", configMap.Name, err))
+			logFatal(fmt.Sprintf("Error updating configmap %s: %s", configMap.Name, err))
 		}
+		log.Printf("Updated configmap `%s`\n", configMap.Name)
 	}
 
 	if obsoleteSecretName != "" {

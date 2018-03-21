@@ -58,7 +58,7 @@ func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.S
 			ObjectMeta: metav1.ObjectMeta{
 				Name: name,
 			},
-			Data: map[string][]byte{},
+			Data: map[string][]byte{"dummy": []byte("data")},
 		}
 
 		secret.Data[name] = []byte(name)
@@ -101,7 +101,7 @@ func TestGetSecretConfig(t *testing.T) {
 	configMap := GetSecretConfig(&c)
 
 	if assert.NotNil(t, configMap) {
-		assert.Equal(t, SECRETS_CONFIGMAP_NAME, configMap.ObjectMeta.Name)
+		assert.Equal(t, SECRETS_CONFIGMAP_NAME, configMap.Name)
 		assert.Equal(t, LEGACY_SECRETS_NAME, configMap.Data[CURRENT_SECRETS_NAME])
 		assert.Equal(t, "0", configMap.Data[CURRENT_SECRETS_GENERATION])
 	}
@@ -121,10 +121,10 @@ func TestGetSecrets(t *testing.T) {
 		secrets := GetSecrets(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
-			assert.Equal(t, "", secrets.ObjectMeta.Name)
+			assert.Empty(t, secrets.Name)
 		}
-		// Current secrets name being empty signals that the config map must be created, not updated
-		assert.Equal(t, "", configMap.Data[CURRENT_SECRETS_NAME])
+		// Current secrets name being empty signals that the configmap must be created, not updated
+		assert.Empty(t, configMap.Data[CURRENT_SECRETS_NAME])
 	})
 
 	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
@@ -161,7 +161,9 @@ func TestGetSecrets(t *testing.T) {
 		secrets := GetSecrets(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
-			assert.Equal(t, "current-secret", secrets.ObjectMeta.Name)
+			// Name should be empty, only Data should be copied
+			assert.Empty(t, secrets.Name)
+			assert.Equal(t, []byte("data"), secrets.Data["dummy"])
 		}
 	})
 }
