@@ -1,4 +1,4 @@
-package secret
+package secrets
 
 import (
 	"errors"
@@ -49,7 +49,7 @@ func (m *MockSecretInterface) Delete(name string, options *metav1.DeleteOptions)
 func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.Secret, error) {
 	m.Called(name, options)
 
-	if name == LEGACY_SECRETS_NAME {
+	if name == legacySecretName {
 		return nil, errors.New("missing")
 	} else if name == "missing" {
 		return nil, errors.New("missing")
@@ -97,17 +97,17 @@ func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap,
 
 func TestGetSecretConfig(t *testing.T) {
 	var c MockConfigMapInterface
-	c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+	c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 	configMap := GetSecretConfig(&c)
 
 	if assert.NotNil(t, configMap) {
-		assert.Equal(t, SECRETS_CONFIGMAP_NAME, configMap.Name)
-		assert.Equal(t, LEGACY_SECRETS_NAME, configMap.Data[CURRENT_SECRETS_NAME])
-		assert.Equal(t, "0", configMap.Data[CURRENT_SECRETS_GENERATION])
+		assert.Equal(t, secretsConfigMapName, configMap.Name)
+		assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
+		assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
 	}
 }
 
-func TestGetSecrets(t *testing.T) {
+func TestGetSecret(t *testing.T) {
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 
@@ -123,23 +123,23 @@ func TestGetSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
 
 		var s MockSecretInterface
-		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
+		s.On("Get", legacySecretName, metav1.GetOptions{})
 
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
 		mockLog.On("Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
 
-		_ = GetSecrets(&s, configMap)
+		_ = GetSecret(&s, configMap)
 
 		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_NAME is missing or empty."})
 
 	})
 
-	t.Run("ConfigMap and Secrets don't exist yet", func(t *testing.T) {
+	t.Run("ConfigMap and Secret don't exist yet", func(t *testing.T) {
 		defer func() {
 			logFatal = origLogFatal
 			getEnv = origGetEnv
@@ -151,18 +151,18 @@ func TestGetSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
 
 		var s MockSecretInterface
-		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
-		secrets := GetSecrets(&s, configMap)
+		s.On("Get", legacySecretName, metav1.GetOptions{})
+		secrets := GetSecret(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
 			assert.Equal(t, "new-secret", secrets.Name)
 		}
 		// Current secrets name being empty signals that the configmap must be created, not updated
-		assert.Empty(t, configMap.Data[CURRENT_SECRETS_NAME])
+		assert.Empty(t, configMap.Data[currentSecretName])
 	})
 
 	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
@@ -177,9 +177,9 @@ func TestGetSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
-		configMap.Data[CURRENT_SECRETS_NAME] = "missing"
+		configMap.Data[currentSecretName] = "missing"
 
 		var s MockSecretInterface
 		s.On("Get", "missing", metav1.GetOptions{})
@@ -188,7 +188,7 @@ func TestGetSecrets(t *testing.T) {
 		logFatal = mockLog.Fatal
 		mockLog.On("Fatal", []interface{}{"Cannot get previous version of secrets using name 'missing'."})
 
-		secrets := GetSecrets(&s, configMap)
+		secrets := GetSecret(&s, configMap)
 
 		assert.Nil(t, secrets)
 	})
@@ -208,13 +208,13 @@ func TestGetSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
-		configMap.Data[CURRENT_SECRETS_NAME] = "current-secret"
+		configMap.Data[currentSecretName] = "current-secret"
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
-		secrets := GetSecrets(&s, configMap)
+		secrets := GetSecret(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
 			assert.Equal(t, "new-secret", secrets.Name)
@@ -237,20 +237,20 @@ func TestGetSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
-		configMap.Data[CURRENT_SECRETS_NAME] = "current-secret"
+		configMap.Data[currentSecretName] = "current-secret"
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
-		secrets := GetSecrets(&s, configMap)
+		secrets := GetSecret(&s, configMap)
 		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
 
 		assert.Nil(t, secrets)
 	})
 }
 
-func TestGenerateSecrets(t *testing.T) {
+func TestGenerateSecret(t *testing.T) {
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 	defer func() {
@@ -273,12 +273,12 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		var c MockConfigMapInterface
-		c.On("Get", SECRETS_CONFIGMAP_NAME, metav1.GetOptions{})
+		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
 		configMap := GetSecretConfig(&c)
 
 		var s MockSecretInterface
-		s.On("Get", LEGACY_SECRETS_NAME, metav1.GetOptions{})
-		secrets := GetSecrets(&s, configMap)
+		s.On("Get", legacySecretName, metav1.GetOptions{})
+		secrets := GetSecret(&s, configMap)
 
 		var mockLog MockLog
 		logFatal = mockLog.Fatal
@@ -291,7 +291,7 @@ func TestGenerateSecrets(t *testing.T) {
 				},
 			},
 		}
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 
 		mockLog.AssertCalled(t, "Fatal", []interface{}{"KUBE_SECRETS_GENERATION_COUNTER is missing or empty."})
 	})
@@ -317,10 +317,10 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{"non-generated": []byte("obsolete")}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Equal(t, []byte("obsolete"), secrets.Data["non-generated"])
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.Empty(t, secrets.Data["non-generated"])
 	})
 
@@ -340,10 +340,10 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["dirty"])
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["dirty"])
 	})
 
@@ -363,10 +363,10 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		secrets.Data["clean"] = []byte("clean")
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
 
@@ -397,11 +397,11 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ssh-key"])
 		assert.Empty(t, secrets.Data["ssh-key-fingerprint"])
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
 		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
 	})
@@ -433,12 +433,12 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		secrets.Data["ssh-key"] = []byte("key")
 		secrets.Data["ssh-key-fingerprint"] = []byte("fingerprint")
 
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 
 		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
 		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key-fingerprint"])
@@ -471,11 +471,11 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ca-cert"])
 		assert.Empty(t, secrets.Data["ca-key"])
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
 		assert.NotEmpty(t, secrets.Data["ca-key"])
 	})
@@ -507,11 +507,11 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		secrets.Data["ca-cert"] = []byte("cert")
 		secrets.Data["ca-key"] = []byte("key")
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ca-key"])
 	})
@@ -543,11 +543,11 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ssl-cert"])
 		assert.Empty(t, secrets.Data["ssl-key"])
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-key"])
 	})
@@ -579,11 +579,11 @@ func TestGenerateSecrets(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_GENERATION: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		secrets.Data["ssl-cert"] = []byte("cert")
 		secrets.Data["ssl-key"] = []byte("key")
-		GenerateSecrets(manifest, secrets, configMap)
+		GenerateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 	})
@@ -665,7 +665,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 	})
 }
 
-func TestUpdateSecrets(t *testing.T) {
+func TestUpdateSecret(t *testing.T) {
 	t.Parallel()
 
 	origLogFatal := logFatal
@@ -692,19 +692,19 @@ func TestUpdateSecrets(t *testing.T) {
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		s.On("Create", secrets)
-		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		var c MockConfigMapInterface
 		configMap := &v1.ConfigMap{Data: map[string]string{}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
-		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		UpdateSecrets(&s, secrets, &c, configMap)
+		UpdateSecret(&s, secrets, &c, configMap)
 
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
-		s.AssertNotCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.AssertNotCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertCalled(t, "Create", configMap)
 		c.AssertNotCalled(t, "Update", configMap)
@@ -729,19 +729,19 @@ func TestUpdateSecrets(t *testing.T) {
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		s.On("Create", secrets)
-		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		var c MockConfigMapInterface
-		configMap := &v1.ConfigMap{Data: map[string]string{CURRENT_SECRETS_NAME: LEGACY_SECRETS_NAME}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretName: legacySecretName}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
-		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		UpdateSecrets(&s, secrets, &c, configMap)
+		UpdateSecret(&s, secrets, &c, configMap)
 
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
-		s.AssertNotCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.AssertNotCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)
@@ -766,22 +766,22 @@ func TestUpdateSecrets(t *testing.T) {
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		s.On("Create", secrets)
-		s.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		var c MockConfigMapInterface
 		configMap := &v1.ConfigMap{Data: map[string]string{
-			CURRENT_SECRETS_NAME:  "current-secret",
-			PREVIOUS_SECRETS_NAME: LEGACY_SECRETS_NAME,
+			currentSecretName:  "current-secret",
+			previousSecretName: legacySecretName,
 		}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
-		c.On("Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		UpdateSecrets(&s, secrets, &c, configMap)
+		UpdateSecret(&s, secrets, &c, configMap)
 
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
-		s.AssertCalled(t, "Delete", LEGACY_SECRETS_NAME, &metav1.DeleteOptions{})
+		s.AssertCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)

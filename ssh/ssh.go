@@ -14,12 +14,14 @@ import (
 	"github.com/SUSE/scf-secret-generator/util"
 )
 
-type SSHKey struct {
+// Key describes a key/fingerprint pair
+type Key struct {
 	PrivateKey  string // Name to associate with private key
 	Fingerprint string // Name to associate with fingerprint
 }
 
-func GenerateSSHKey(secrets *v1.Secret, key SSHKey) {
+// GenerateKey will create a private key and fingerprint
+func GenerateKey(secrets *v1.Secret, key Key) {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
@@ -53,7 +55,8 @@ func GenerateSSHKey(secrets *v1.Secret, key SSHKey) {
 	secrets.Data[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
 }
 
-func RecordSSHKeyInfo(keys map[string]SSHKey, configVar *model.ConfigurationVariable) {
+// RecordKeyInfo records priave key or fingerprint names for later generation
+func RecordKeyInfo(keys map[string]Key, configVar *model.ConfigurationVariable) {
 	// Get or create the key from the map, there should always be
 	// a pair of private keys and fingerprints
 	key := keys[configVar.Generator.ID]

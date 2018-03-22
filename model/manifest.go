@@ -92,6 +92,7 @@ type Manifest struct {
 var logFatal = log.Fatal
 var fileReader = ioutil.ReadFile
 
+// GetManifest loads a manifest from file
 func GetManifest(name string) (manifest Manifest) {
 	manifestFile, err := fileReader(name)
 	if err != nil {

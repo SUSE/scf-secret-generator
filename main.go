@@ -5,7 +5,7 @@ import (
 	"os"
 
 	"github.com/SUSE/scf-secret-generator/model"
-	"github.com/SUSE/scf-secret-generator/secret"
+	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
 func printHelp() {
@@ -20,13 +20,13 @@ func main() {
 
 	manifest := model.GetManifest(os.Args[1])
 
-	c := secret.GetConfigMapInterface()
-	s := secret.GetSecretInterface()
+	c := secrets.GetConfigMapInterface()
+	s := secrets.GetSecretInterface()
 
-	configMap := secret.GetSecretConfig(c)
-	secrets := secret.GetSecrets(s, configMap)
-	if secrets != nil {
-		secret.GenerateSecrets(manifest, secrets, configMap)
-		secret.UpdateSecrets(s, secrets, c, configMap)
+	configMap := secrets.GetSecretConfig(c)
+	secret := secrets.GetSecret(s, configMap)
+	if secret != nil {
+		secrets.GenerateSecret(manifest, secret, configMap)
+		secrets.UpdateSecret(s, secret, c, configMap)
 	}
 }

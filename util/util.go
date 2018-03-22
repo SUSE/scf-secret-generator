@@ -37,10 +37,12 @@ func ClearOverrides() {
 	override = make(map[string]string)
 }
 
+// ConvertNameToKey turns a name to lowercase and replaces underscores by dashes
 func ConvertNameToKey(name string) string {
 	return strings.Replace(strings.ToLower(name), "_", "-", -1)
 }
 
+// ExpandEnvTemplates expands a Go template string using an (overridable) env map
 func ExpandEnvTemplates(str string) string {
 	t, err := template.New("").Parse(str)
 	if err != nil {

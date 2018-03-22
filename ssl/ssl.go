@@ -25,8 +25,9 @@ var createCA = createCAImpl
 var createCert = createCertImpl
 var getEnv = os.Getenv
 
-const DEFAULT_CA = "cacert"
+const defaultCA = "cacert"
 
+// CertInfo contains all the information required to generate an SSL cert
 type CertInfo struct {
 	PrivateKeyName  string // Name to associate with private key
 	CertificateName string // Name to associate with certificate
@@ -41,6 +42,7 @@ type CertInfo struct {
 
 var certInfo = make(map[string]CertInfo)
 
+// RecordCertInfo record cert information for later generation
 func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	info := certInfo[configVar.Generator.ID]
 
@@ -63,6 +65,7 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 	certInfo[configVar.Generator.ID] = info
 }
 
+// GenerateCerts creates an SSL cert and private key
 func GenerateCerts(secrets *v1.Secret) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
@@ -137,9 +140,9 @@ func createCertImpl(secrets *v1.Secret, id string) {
 	}
 
 	// XXX Add support for multiple CAs
-	caInfo := certInfo[DEFAULT_CA]
+	caInfo := certInfo[defaultCA]
 	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
-		logFatalf("CA %s not found", DEFAULT_CA)
+		logFatalf("CA %s not found", defaultCA)
 		return
 	}
 
