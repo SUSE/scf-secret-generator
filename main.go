@@ -18,15 +18,17 @@ func main() {
 		os.Exit(1)
 	}
 
+	sg := secrets.NewSecretGenerator()
+
 	manifest := model.GetManifest(os.Args[1])
 
-	c := secrets.GetConfigMapInterface()
-	s := secrets.GetSecretInterface()
+	c := sg.GetConfigMapInterface()
+	s := sg.GetSecretInterface()
 
-	configMap := secrets.GetSecretConfig(c)
-	secret := secrets.GetSecret(s, configMap)
+	configMap := sg.GetSecretConfig(c)
+	secret := sg.GetSecret(s, configMap)
 	if secret != nil {
-		secrets.GenerateSecret(manifest, secret, configMap)
-		secrets.UpdateSecret(s, secret, c, configMap)
+		sg.GenerateSecret(manifest, secret, configMap)
+		sg.UpdateSecret(s, secret, c, configMap)
 	}
 }
