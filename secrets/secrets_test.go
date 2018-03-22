@@ -161,8 +161,8 @@ func TestGetSecret(t *testing.T) {
 		if assert.NotNil(t, secrets) {
 			assert.Equal(t, "new-secret", secrets.Name)
 		}
-		// Current secrets name being empty signals that the configmap must be created, not updated
-		assert.Empty(t, configMap.Data[currentSecretName])
+		assert.Empty(t, configMap.Data[currentSecretName],
+			"configmap[%s] must be empty to signal that the configmap doesn't exist yet and must be created", currentSecretName)
 	})
 
 	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
@@ -594,80 +594,78 @@ func TestMigrateRenamedVariable(t *testing.T) {
 	t.Run("NoPreviousNames", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has no previous names, then it should remain empty
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME"}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Empty(t, string(secrets.Data["new-name"]))
+		assert.Empty(t, string(secrets.Data["new-name"]),
+			"If `name` has no previous names, then it should remain empty")
 	})
 
 	t.Run("PreviousNameWithoutValue", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a previous name, but without value, then it should remain empty
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Empty(t, string(secrets.Data["new-name"]))
+		assert.Empty(t, string(secrets.Data["new-name"]),
+			"If `name` has a previous name, but without value, then it should remain empty")
 	})
 
 	t.Run("PreviousNameWithValue", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a previous name, then it should copy the previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
+			"If `name` has a previous name, then it should copy the previous value")
 	})
 
 	t.Run("NewValueAlreadyExists", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has a value, then it should not be changed
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 		secrets.Data["new-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
+		assert.Equal(t, "value2", string(secrets.Data["new-name"]),
+			"If `name` has a value, then it should not be changed")
 	})
 
 	t.Run("MultiplePreviousNames", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has multiple previous names, then it should copy the first previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
 		secrets.Data["previous-previous-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Equal(t, "value1", string(secrets.Data["new-name"]))
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
+			"If `name` has multiple previous names, then it should copy the first previous value")
 	})
 
 	t.Run("MultiplePreviousNamesMissingSomeValues", func(t *testing.T) {
 		t.Parallel()
 
-		// If `name` has multiple previous names, then it should copy the first non-empty previous value
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-previous-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
-		assert.Equal(t, "value2", string(secrets.Data["new-name"]))
+		assert.Equal(t, "value2", string(secrets.Data["new-name"]),
+			"If `name` has multiple previous names, then it should copy the first non-empty previous value")
 	})
 }
 
 func TestUpdateSecret(t *testing.T) {
-	t.Parallel()
-
 	origLogFatal := logFatal
 	origGetEnv := getEnv
 	defer func() {

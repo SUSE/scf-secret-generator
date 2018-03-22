@@ -143,15 +143,13 @@ func GenerateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.C
 
 	if secretsGeneration != configMap.Data[currentSecretGeneration] {
 		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], secretsGeneration)
+
+		immutable := make(map[string]bool)
+		for _, configVar := range manifest.Configuration.Variables {
+			immutable[util.ConvertNameToKey(configVar.Name)] = configVar.Immutable
+		}
 		for name := range secrets.Data {
-			rotate := true
-			for _, configVar := range manifest.Configuration.Variables {
-				if name == util.ConvertNameToKey(configVar.Name) && configVar.Immutable {
-					rotate = false
-					break
-				}
-			}
-			if rotate {
+			if !immutable[name] {
 				log.Printf("  Resetting %s\n", name)
 				delete(secrets.Data, name)
 			}
@@ -194,15 +192,12 @@ func GenerateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.C
 	ssl.GenerateCerts(secrets)
 
 	// remove all secrets no longer referenced in the manifest
+	generatedSecret := make(map[string]bool)
+	for _, configVar := range manifest.Configuration.Variables {
+		generatedSecret[util.ConvertNameToKey(configVar.Name)] = configVar.Secret && configVar.Generator != nil
+	}
 	for name := range secrets.Data {
-		stillUsed := false
-		for _, configVar := range manifest.Configuration.Variables {
-			if configVar.Secret && configVar.Generator != nil && name == util.ConvertNameToKey(configVar.Name) {
-				stillUsed = true
-				break
-			}
-		}
-		if !stillUsed {
+		if !generatedSecret[name] {
 			delete(secrets.Data, name)
 		}
 	}
