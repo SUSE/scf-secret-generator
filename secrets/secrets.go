@@ -30,11 +30,13 @@ const previousSecretName = "previous-secrets-name"
 var kubeClusterConfig = rest.InClusterConfig
 var kubeNewClient = kubernetes.NewForConfig
 
+// SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
 	Fatal  func(v ...interface{})
 	Getenv func(key string) string
 }
 
+// NewSecretGenerator returns an instance of the SecretGenerator
 func NewSecretGenerator() SecretGenerator {
 	return SecretGenerator{
 		Fatal:  log.Fatal,
