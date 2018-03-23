@@ -32,28 +32,64 @@ var kubeNewClient = kubernetes.NewForConfig
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
-	Fatal  func(v ...interface{})
-	Getenv func(key string) string
+	Fatal func(v ...interface{})
+
+	namespace           string
+	serviceDomainSuffix string
+	secretsName         string
+	secretsGeneration   string
 }
 
 // NewSecretGenerator returns an instance of the SecretGenerator
 func NewSecretGenerator() SecretGenerator {
-	return SecretGenerator{
-		Fatal:  log.Fatal,
-		Getenv: os.Getenv,
+	sg := SecretGenerator{
+		Fatal: log.Fatal,
+
+		namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
+		serviceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
+		secretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
+		secretsGeneration:   os.Getenv("KUBE_SECRETS_GENERATION_COUNTER"),
+	}
+	// XXX All these settings should be passed from the commandline and not the environment
+	if sg.namespace == "" {
+		log.Fatal("KUBERNETES_NAMESPACE is not set")
+	}
+	if sg.serviceDomainSuffix == "" {
+		log.Fatal("KUBE_SERVICE_DOMAIN_SUFFIX is not set")
+	}
+	if sg.secretsName == "" {
+		log.Fatal("KUBE_SECRETS_GENERATION_NAME is not set")
+	}
+	if sg.secretsGeneration == "" {
+		log.Fatal("KUBE_SECRETS_GENERATION_COUNTER is not set")
+	}
+	return sg
+}
+
+// Generate will fetch the current secrets, generate any missing values, and writes the new secrets
+// under a new name. Then it updates the secrets configmap to describe the updated status quo.
+func (sg *SecretGenerator) Generate(manifest model.Manifest) {
+	c := sg.getConfigMapInterface()
+	s := sg.getSecretInterface()
+
+	configMap := sg.getSecretConfig(c)
+	secret := sg.getSecret(s, configMap)
+	if secret != nil {
+		sg.generateSecret(manifest, secret, configMap)
+		sg.updateSecret(s, secret, c, configMap)
 	}
 }
 
-// ConfigMapInterface is a subset of v1.ConfigMapInterface
-type ConfigMapInterface interface {
+// configMapInterface is a subset of v1.ConfigMapInterface
+type configMapInterface interface {
 	Create(*v1.ConfigMap) (*v1.ConfigMap, error)
 	Get(name string, options metav1.GetOptions) (*v1.ConfigMap, error)
 	Update(*v1.ConfigMap) (*v1.ConfigMap, error)
 	Delete(name string, options *metav1.DeleteOptions) error
 }
 
-// SecretInterface is a subset of v1.SecretInterface
-type SecretInterface interface {
+// secretInterface is a subset of v1.SecretInterface
+type secretInterface interface {
 	Create(*v1.Secret) (*v1.Secret, error)
 	Get(name string, options metav1.GetOptions) (*v1.Secret, error)
 	Update(*v1.Secret) (*v1.Secret, error)
@@ -71,27 +107,27 @@ func kubeClientset() (*kubernetes.Clientset, error) {
 }
 
 // GetConfigMapInterface returns a configmap interface for the KUBERNETES_NAMESPACE
-func (sg *SecretGenerator) GetConfigMapInterface() ConfigMapInterface {
+func (sg *SecretGenerator) getConfigMapInterface() configMapInterface {
 	clientset, err := kubeClientset()
 	if err != nil {
 		sg.Fatal(err)
 		return nil
 	}
-	return clientset.CoreV1().ConfigMaps(sg.Getenv("KUBERNETES_NAMESPACE"))
+	return clientset.CoreV1().ConfigMaps(sg.namespace)
 }
 
 // GetSecretInterface returns a secrets interface for the KUBERNETES_NAMESPACE
-func (sg *SecretGenerator) GetSecretInterface() SecretInterface {
+func (sg *SecretGenerator) getSecretInterface() secretInterface {
 	clientset, err := kubeClientset()
 	if err != nil {
 		sg.Fatal(err)
 		return nil
 	}
-	return clientset.CoreV1().Secrets(sg.Getenv("KUBERNETES_NAMESPACE"))
+	return clientset.CoreV1().Secrets(sg.namespace)
 }
 
 // GetSecretConfig returns the configmap containing the secrets configuration
-func (sg *SecretGenerator) GetSecretConfig(c ConfigMapInterface) *v1.ConfigMap {
+func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
 	configMap, err := c.Get(secretsConfigMapName, metav1.GetOptions{})
 	if err != nil {
 		configMap = &v1.ConfigMap{
@@ -108,14 +144,10 @@ func (sg *SecretGenerator) GetSecretConfig(c ConfigMapInterface) *v1.ConfigMap {
 
 // GetSecret returns a new Secret object initialized with the data
 // of the currently active secrets
-func (sg *SecretGenerator) GetSecret(s SecretInterface, configMap *v1.ConfigMap) *v1.Secret {
+func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) *v1.Secret {
 	currentName := configMap.Data[currentSecretName]
 
-	newName := sg.Getenv("KUBE_SECRETS_GENERATION_NAME")
-	if newName == "" {
-		sg.Fatal("KUBE_SECRETS_GENERATION_NAME is missing or empty.")
-		return nil
-	}
+	newName := sg.secretsName
 	if newName == currentName {
 		log.Printf("Secret `%s` already exists; nothing to do\n", newName)
 		return nil
@@ -146,12 +178,8 @@ func (sg *SecretGenerator) GetSecret(s SecretInterface, configMap *v1.ConfigMap)
 // GenerateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
-func (sg *SecretGenerator) GenerateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) {
-	secretsGeneration := sg.Getenv("KUBE_SECRETS_GENERATION_COUNTER")
-	if secretsGeneration == "" {
-		sg.Fatal("KUBE_SECRETS_GENERATION_COUNTER is missing or empty.")
-		return
-	}
+func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) {
+	secretsGeneration := sg.secretsGeneration
 
 	if secretsGeneration != configMap.Data[currentSecretGeneration] {
 		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], secretsGeneration)
@@ -221,7 +249,7 @@ func (sg *SecretGenerator) GenerateSecret(manifest model.Manifest, secrets *v1.S
 // UpdateSecret creates the new Secret object and records the new name in the configmap.
 // The current secrets become the previous secrets, and any previous previous secrets will
 // be deleted. The configmap object in Kube is then updated to match the new configuration.
-func (sg *SecretGenerator) UpdateSecret(s SecretInterface, secrets *v1.Secret, c ConfigMapInterface, configMap *v1.ConfigMap) {
+func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) {
 	var obsoleteSecretName = configMap.Data[previousSecretName]
 	configMap.Data[previousSecretName] = configMap.Data[currentSecretName]
 	configMap.Data[currentSecretName] = secrets.Name
