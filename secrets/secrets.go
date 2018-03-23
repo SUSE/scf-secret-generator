@@ -32,8 +32,6 @@ var kubeNewClient = kubernetes.NewForConfig
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
-	Fatal func(v ...interface{})
-
 	namespace           string
 	serviceDomainSuffix string
 	secretsName         string
@@ -43,8 +41,6 @@ type SecretGenerator struct {
 // NewSecretGenerator returns an instance of the SecretGenerator
 func NewSecretGenerator() SecretGenerator {
 	sg := SecretGenerator{
-		Fatal: log.Fatal,
-
 		namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
 		serviceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
 		secretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
@@ -69,14 +65,29 @@ func NewSecretGenerator() SecretGenerator {
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
 // under a new name. Then it updates the secrets configmap to describe the updated status quo.
 func (sg *SecretGenerator) Generate(manifest model.Manifest) {
-	c := sg.getConfigMapInterface()
-	s := sg.getSecretInterface()
+	c, err := sg.getConfigMapInterface()
+	if err != nil {
+		log.Fatal(err)
+	}
+	s, err := sg.getSecretInterface()
+	if err != nil {
+		log.Fatal(err)
+	}
 
 	configMap := sg.getSecretConfig(c)
-	secret := sg.getSecret(s, configMap)
+	secret, err := sg.getSecret(s, configMap)
+	if err != nil {
+		log.Fatal(err)
+	}
 	if secret != nil {
-		sg.generateSecret(manifest, secret, configMap)
-		sg.updateSecret(s, secret, c, configMap)
+		err = sg.generateSecret(manifest, secret, configMap)
+		if err != nil {
+			log.Fatal(err)
+		}
+		err = sg.updateSecret(s, secret, c, configMap)
+		if err != nil {
+			log.Fatal(err)
+		}
 	}
 }
 
@@ -107,23 +118,21 @@ func kubeClientset() (*kubernetes.Clientset, error) {
 }
 
 // GetConfigMapInterface returns a configmap interface for the KUBERNETES_NAMESPACE
-func (sg *SecretGenerator) getConfigMapInterface() configMapInterface {
+func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
-		sg.Fatal(err)
-		return nil
+		return nil, err
 	}
-	return clientset.CoreV1().ConfigMaps(sg.namespace)
+	return clientset.CoreV1().ConfigMaps(sg.namespace), nil
 }
 
 // GetSecretInterface returns a secrets interface for the KUBERNETES_NAMESPACE
-func (sg *SecretGenerator) getSecretInterface() secretInterface {
+func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
-		sg.Fatal(err)
-		return nil
+		return nil, err
 	}
-	return clientset.CoreV1().Secrets(sg.namespace)
+	return clientset.CoreV1().Secrets(sg.namespace), nil
 }
 
 // GetSecretConfig returns the configmap containing the secrets configuration
@@ -144,13 +153,13 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
 
 // GetSecret returns a new Secret object initialized with the data
 // of the currently active secrets
-func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) *v1.Secret {
+func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
 	currentName := configMap.Data[currentSecretName]
 
 	newName := sg.secretsName
 	if newName == currentName {
 		log.Printf("Secret `%s` already exists; nothing to do\n", newName)
-		return nil
+		return nil, nil
 	}
 
 	newSecret := &v1.Secret{
@@ -165,20 +174,19 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 		newSecret.Data = currentSecret.Data
 	} else {
 		if currentName != legacySecretName {
-			sg.Fatal(fmt.Sprintf("Cannot get previous version of secrets using name '%s'.", currentName))
-			return nil
+			return nil, fmt.Errorf("Cannot get previous version of secrets using name '%s'", currentName)
 		}
 		// This is a new installation, so make sure the configmap is created, not updated
 		configMap.Data[currentSecretName] = ""
 	}
 
-	return newSecret
+	return newSecret, nil
 }
 
 // GenerateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
-func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) {
+func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
 	secretsGeneration := sg.secretsGeneration
 
 	if secretsGeneration != configMap.Data[currentSecretGeneration] {
@@ -244,12 +252,13 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	}
 
 	log.Println("Done with generation")
+	return nil
 }
 
 // UpdateSecret creates the new Secret object and records the new name in the configmap.
 // The current secrets become the previous secrets, and any previous previous secrets will
 // be deleted. The configmap object in Kube is then updated to match the new configuration.
-func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) {
+func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) error {
 	var obsoleteSecretName = configMap.Data[previousSecretName]
 	configMap.Data[previousSecretName] = configMap.Data[currentSecretName]
 	configMap.Data[currentSecretName] = secrets.Name
@@ -257,7 +266,7 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	// create new secret
 	_, err := s.Create(secrets)
 	if err != nil {
-		sg.Fatal(fmt.Sprintf("Error creating secret %s: %s", secrets.Name, err))
+		return fmt.Errorf("Error creating secret %s: %s", secrets.Name, err)
 	}
 	log.Printf("Created secret `%s`\n", secrets.Name)
 
@@ -265,14 +274,14 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	if configMap.Data[previousSecretName] == "" {
 		_, err = c.Create(configMap)
 		if err != nil {
-			sg.Fatal(fmt.Sprintf("Error creating configmap %s: %s", configMap.Name, err))
+			return fmt.Errorf("Error creating configmap %s: %s", configMap.Name, err)
 		}
 		log.Printf("Created configmap `%s`\n", configMap.Name)
 	} else {
 		log.Printf("previous secret `%s`\n", configMap.Data[previousSecretName])
 		_, err = c.Update(configMap)
 		if err != nil {
-			sg.Fatal(fmt.Sprintf("Error updating configmap %s: %s", configMap.Name, err))
+			return fmt.Errorf("Error updating configmap %s: %s", configMap.Name, err)
 		}
 		log.Printf("Updated configmap `%s`\n", configMap.Name)
 	}
@@ -283,6 +292,7 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 			log.Printf(fmt.Sprintf("Error deleting secret %s: %s", obsoleteSecretName, err))
 		}
 	}
+	return nil
 }
 
 func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) {

@@ -127,11 +127,13 @@ func TestGetSecret(t *testing.T) {
 
 		var s MockSecretInterface
 		s.On("Get", legacySecretName, metav1.GetOptions{})
-		secrets := sg.getSecret(&s, configMap)
+
+		secrets, err := sg.getSecret(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
 			assert.Equal(t, "new-secret", secrets.Name)
 		}
+		assert.NoError(t, err)
 		assert.Empty(t, configMap.Data[currentSecretName],
 			"configmap[%s] must be empty to signal that the configmap doesn't exist yet and must be created", currentSecretName)
 	})
@@ -140,8 +142,6 @@ func TestGetSecret(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var c MockConfigMapInterface
 		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
@@ -151,19 +151,15 @@ func TestGetSecret(t *testing.T) {
 		var s MockSecretInterface
 		s.On("Get", "missing", metav1.GetOptions{})
 
-		mockLog.On("Fatal", []interface{}{"Cannot get previous version of secrets using name 'missing'."})
+		_, err := sg.getSecret(&s, configMap)
 
-		secrets := sg.getSecret(&s, configMap)
-
-		assert.Nil(t, secrets)
+		assert.Error(t, err, "Secret is not supposed to exist")
 	})
 
 	t.Run("ConfigMap names current secret that does exist", func(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var c MockConfigMapInterface
 		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
@@ -172,12 +168,13 @@ func TestGetSecret(t *testing.T) {
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
-		secrets := sg.getSecret(&s, configMap)
+		secrets, err := sg.getSecret(&s, configMap)
 
 		if assert.NotNil(t, secrets) {
 			assert.Equal(t, "new-secret", secrets.Name)
 			assert.Equal(t, []byte("data"), secrets.Data["dummy"])
 		}
+		assert.NoError(t, err)
 	})
 
 	t.Run("ConfigMap current secret is the same as KUBE_SECRETS_GENERATION_NAME", func(t *testing.T) {
@@ -185,8 +182,6 @@ func TestGetSecret(t *testing.T) {
 
 		sg := testingSecretGenerator()
 		sg.secretsName = "current-secret"
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var c MockConfigMapInterface
 		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
@@ -195,10 +190,11 @@ func TestGetSecret(t *testing.T) {
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
-		secrets := sg.getSecret(&s, configMap)
-		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
+		secrets, err := sg.getSecret(&s, configMap)
 
+		assert.NoError(t, err)
 		assert.Nil(t, secrets)
+		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
 	})
 }
 
@@ -681,8 +677,6 @@ func TestUpdateSecret(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
@@ -695,24 +689,21 @@ func TestUpdateSecret(t *testing.T) {
 		c.On("Update", configMap)
 		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		sg.updateSecret(&s, secrets, &c, configMap)
+		err := sg.updateSecret(&s, secrets, &c, configMap)
 
+		assert.NoError(t, err)
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
 		s.AssertNotCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertCalled(t, "Create", configMap)
 		c.AssertNotCalled(t, "Update", configMap)
-
-		mockLog.AssertNotCalled(t, "Fatal")
 	})
 
 	t.Run("ConfigMap has current secret but not previous secret", func(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
@@ -725,24 +716,21 @@ func TestUpdateSecret(t *testing.T) {
 		c.On("Update", configMap)
 		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		sg.updateSecret(&s, secrets, &c, configMap)
+		err := sg.updateSecret(&s, secrets, &c, configMap)
 
+		assert.NoError(t, err)
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
 		s.AssertNotCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)
-
-		mockLog.AssertNotCalled(t, "Fatal")
 	})
 
 	t.Run("ConfigMap has current and previous secret", func(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		var mockLog MockLog
-		sg.Fatal = mockLog.Fatal
 
 		var s MockSecretInterface
 		secrets := &v1.Secret{Data: map[string][]byte{}}
@@ -758,15 +746,14 @@ func TestUpdateSecret(t *testing.T) {
 		c.On("Update", configMap)
 		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
-		sg.updateSecret(&s, secrets, &c, configMap)
+		err := sg.updateSecret(&s, secrets, &c, configMap)
 
+		assert.NoError(t, err)
 		s.AssertCalled(t, "Create", secrets)
 		s.AssertNotCalled(t, "Update", secrets)
 		s.AssertCalled(t, "Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)
-
-		mockLog.AssertNotCalled(t, "Fatal")
 	})
 }
