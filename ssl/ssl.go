@@ -23,7 +23,6 @@ import (
 var logFatalf = log.Fatalf
 var createCA = createCAImpl
 var createCert = createCertImpl
-var getEnv = os.Getenv
 
 const defaultCA = "cacert"
 
@@ -40,10 +39,8 @@ type CertInfo struct {
 	PrivateKey  []byte
 }
 
-var certInfo = make(map[string]CertInfo)
-
 // RecordCertInfo record cert information for later generation
-func RecordCertInfo(configVar *model.ConfigurationVariable) {
+func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.ConfigurationVariable) {
 	info := certInfo[configVar.Generator.ID]
 
 	switch configVar.Generator.ValueType {
@@ -66,13 +63,13 @@ func RecordCertInfo(configVar *model.ConfigurationVariable) {
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(secrets *v1.Secret) {
+func GenerateCerts(certInfo map[string]CertInfo, secrets *v1.Secret) {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if info.IsAuthority {
 			glog.Printf("- SSL CA: %s\n", id)
 
-			createCA(secrets, id)
+			createCA(certInfo, secrets, id)
 		}
 	}
 	for id, info := range certInfo {
@@ -85,7 +82,7 @@ func GenerateCerts(secrets *v1.Secret) {
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		createCert(secrets, id)
+		createCert(certInfo, secrets, id)
 	}
 	return
 }
@@ -94,7 +91,7 @@ func rsaKeyRequest() *csr.BasicKeyRequest {
 	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
 }
 
-func createCAImpl(secrets *v1.Secret, id string) {
+func createCAImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
 	var err error
 	info := certInfo[id]
 
@@ -131,7 +128,7 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCertImpl(secrets *v1.Secret, id string) {
+func createCertImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
 	var err error
 	info := certInfo[id]
 

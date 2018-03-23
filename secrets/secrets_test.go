@@ -528,6 +528,24 @@ func TestGenerateSecret(t *testing.T) {
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
 					{
+						Name:   "ca-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ca-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+					{
 						Name:   "ssl-cert",
 						Secret: true,
 						Generator: &model.ConfigurationVariableGenerator{
@@ -566,6 +584,24 @@ func TestGenerateSecret(t *testing.T) {
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
 				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "ca-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ca-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
 					{
 						Name:   "ssl-cert",
 						Secret: true,

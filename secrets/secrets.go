@@ -170,6 +170,7 @@ func (sg *SecretGenerator) GenerateSecret(manifest model.Manifest, secrets *v1.S
 	}
 
 	sshKeys := make(map[string]ssh.Key)
+	certInfo := make(map[string]ssl.CertInfo)
 
 	log.Println("Generate Passwords ...")
 
@@ -183,7 +184,7 @@ func (sg *SecretGenerator) GenerateSecret(manifest model.Manifest, secrets *v1.S
 			password.GeneratePassword(secrets, configVar.Name)
 
 		case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
-			ssl.RecordCertInfo(configVar)
+			ssl.RecordCertInfo(certInfo, configVar)
 
 		case model.GeneratorTypeSSH:
 			ssh.RecordKeyInfo(sshKeys, configVar)
@@ -201,7 +202,7 @@ func (sg *SecretGenerator) GenerateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(secrets)
+	ssl.GenerateCerts(certInfo, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)
