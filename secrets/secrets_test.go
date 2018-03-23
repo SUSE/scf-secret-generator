@@ -310,7 +310,7 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["non-generated"])
 	})
 
-	t.Run("New passwords is generated", func(t *testing.T) {
+	t.Run("New password is generated", func(t *testing.T) {
 		sg := NewSecretGenerator()
 		sg.Getenv = getEnv
 
@@ -336,7 +336,7 @@ func TestGenerateSecret(t *testing.T) {
 		assert.NotEmpty(t, secrets.Data["dirty"])
 	})
 
-	t.Run("Existing passwords isn't updated", func(t *testing.T) {
+	t.Run("Existing password isn't updated", func(t *testing.T) {
 		sg := NewSecretGenerator()
 		sg.Getenv = getEnv
 
@@ -346,6 +346,75 @@ func TestGenerateSecret(t *testing.T) {
 					{
 						Name:   "clean",
 						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypePassword,
+						},
+					},
+				},
+			},
+		}
+
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+
+		secrets.Data["clean"] = []byte("clean")
+		sg.GenerateSecret(manifest, secrets, configMap)
+		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
+	})
+
+	t.Run("Existing passwords is updated during rotation", func(t *testing.T) {
+		sg := NewSecretGenerator()
+		sg.Getenv = func(ev string) string {
+			if ev == "KUBE_SECRETS_GENERATION_NAME" {
+				return "new-secret"
+			}
+			if ev == "KUBE_SECRETS_GENERATION_COUNTER" {
+				return "2"
+			}
+			return ""
+		}
+
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "clean",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypePassword,
+						},
+					},
+				},
+			},
+		}
+
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+
+		secrets.Data["clean"] = []byte("clean")
+		sg.GenerateSecret(manifest, secrets, configMap)
+		assert.NotEqual(t, []byte("clean"), secrets.Data["clean"])
+	})
+
+	t.Run("Existing immutable password isn't updated during rotation", func(t *testing.T) {
+		sg := NewSecretGenerator()
+		sg.Getenv = func(ev string) string {
+			if ev == "KUBE_SECRETS_GENERATION_NAME" {
+				return "new-secret"
+			}
+			if ev == "KUBE_SECRETS_GENERATION_COUNTER" {
+				return "2"
+			}
+			return ""
+		}
+
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:      "clean",
+						Secret:    true,
+						Immutable: true,
 						Generator: &model.ConfigurationVariableGenerator{
 							Type: model.GeneratorTypePassword,
 						},
