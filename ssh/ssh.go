@@ -14,12 +14,14 @@ import (
 	"github.com/SUSE/scf-secret-generator/util"
 )
 
-type SSHKey struct {
+// Key describes a key/fingerprint pair
+type Key struct {
 	PrivateKey  string // Name to associate with private key
 	Fingerprint string // Name to associate with fingerprint
 }
 
-func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
+// GenerateKey will create a private key and fingerprint
+func GenerateKey(secrets *v1.Secret, key Key) {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
@@ -29,19 +31,6 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 	}
 
 	log.Printf("- SSH priK: %s\n", key.PrivateKey)
-
-	// Prefer user supplied update data over generating the keys ourselves
-	if len(updates.Data[secretKey]) > 0 {
-		if len(updates.Data[fingerprintKey]) == 0 {
-			log.Fatalf("Update includes %s but not %s", secretKey, fingerprintKey)
-		}
-		secrets.Data[secretKey] = updates.Data[secretKey]
-		secrets.Data[fingerprintKey] = updates.Data[fingerprintKey]
-		return
-	}
-	if len(updates.Data[fingerprintKey]) > 0 {
-		log.Fatalf("Update includes %s but not %s", fingerprintKey, secretKey)
-	}
 
 	// generate private key
 	private, err := rsa.GenerateKey(rand.Reader, 4096)
@@ -66,7 +55,8 @@ func GenerateSSHKey(secrets, updates *v1.Secret, key SSHKey) {
 	secrets.Data[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
 }
 
-func RecordSSHKeyInfo(keys map[string]SSHKey, configVar *model.ConfigurationVariable) {
+// RecordKeyInfo records priave key or fingerprint names for later generation
+func RecordKeyInfo(keys map[string]Key, configVar *model.ConfigurationVariable) {
 	// Get or create the key from the map, there should always be
 	// a pair of private keys and fingerprints
 	key := keys[configVar.Generator.ID]

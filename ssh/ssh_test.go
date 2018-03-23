@@ -12,20 +12,19 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-// GenerateSSHKey tests
+// GenerateKey tests
 
 func TestNewKeyIsCreated(t *testing.T) {
 	t.Parallel()
 
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	updates := &v1.Secret{Data: map[string][]byte{}}
 
-	key := SSHKey{
+	key := Key{
 		PrivateKey:  "foo",
 		Fingerprint: "bar",
 	}
 
-	GenerateSSHKey(secrets, updates, key)
+	GenerateKey(secrets, key)
 
 	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
 	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
@@ -42,28 +41,27 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 	barData := []byte("bar-data")
 
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	updates := &v1.Secret{Data: map[string][]byte{}}
 
 	// Also tests for FOO / foo case conversion
 	secrets.Data["foo"] = fooData
 	secrets.Data["bar"] = barData
 
-	key := SSHKey{
+	key := Key{
 		PrivateKey:  "FOO",
 		Fingerprint: "BAR",
 	}
 
-	GenerateSSHKey(secrets, updates, key)
+	GenerateKey(secrets, key)
 	assert.Equal(t, fooData, secrets.Data["foo"])
 	assert.Equal(t, barData, secrets.Data["bar"])
 }
 
-// RecordSSHKeyInfo tests
+// RecordKeyInfo tests
 
 func TestRecordingFingerprintCreatesKey(t *testing.T) {
 	t.Parallel()
 
-	keys := make(map[string]SSHKey)
+	keys := make(map[string]Key)
 
 	configVar := &model.ConfigurationVariable{
 		Name: "FINGERPRINT_NAME",
@@ -73,7 +71,7 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 		ValueType: model.ValueTypeFingerprint,
 	}
 
-	RecordSSHKeyInfo(keys, configVar)
+	RecordKeyInfo(keys, configVar)
 
 	assert.Equal(t, "FINGERPRINT_NAME", keys["foo"].Fingerprint)
 }
@@ -81,7 +79,7 @@ func TestRecordingFingerprintCreatesKey(t *testing.T) {
 func TestRecordingPrivateCreatesKey(t *testing.T) {
 	t.Parallel()
 
-	keys := make(map[string]SSHKey)
+	keys := make(map[string]Key)
 
 	configVar := &model.ConfigurationVariable{
 		Name: "PRIVATE_KEY_NAME",
@@ -91,7 +89,7 @@ func TestRecordingPrivateCreatesKey(t *testing.T) {
 		ValueType: model.ValueTypePrivateKey,
 	}
 
-	RecordSSHKeyInfo(keys, configVar)
+	RecordKeyInfo(keys, configVar)
 
 	assert.Equal(t, "PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
 }

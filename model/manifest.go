@@ -65,6 +65,7 @@ type ConfigurationVariable struct {
 	Internal      bool                            `yaml:"internal,omitempty"`
 	Secret        bool                            `yaml:"secret,omitempty"`
 	Required      bool                            `yaml:"required,omitempty"`
+	Immutable     bool                            `yaml:"immutable,omitempty"`
 }
 
 // CVType is the type of the configuration variable; see the constants below
@@ -91,6 +92,7 @@ type Manifest struct {
 var logFatal = log.Fatal
 var fileReader = ioutil.ReadFile
 
+// GetManifest loads a manifest from file
 func GetManifest(name string) (manifest Manifest) {
 	manifestFile, err := fileReader(name)
 	if err != nil {

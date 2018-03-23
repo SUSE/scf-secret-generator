@@ -1,6 +1,18 @@
-all: test build
+.PHONY: all format lint vet build test tools
 
-.PHONY: test build
+all: format lint build test vet
+
+format:
+	make/format
+
+lint:
+	make/lint
+
+vet:
+	make/vet
+
+tools:
+	make/tools
 
 test:
 	go test -race -cover $$(go list -f '{{ .ImportPath }}' ./... | grep -v vendor)
