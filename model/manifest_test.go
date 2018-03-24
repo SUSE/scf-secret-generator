@@ -1,92 +1,30 @@
 package model
 
 import (
-	"errors"
 	"testing"
 
-	"github.com/stretchr/testify/mock"
-	"gopkg.in/yaml.v2"
+	"github.com/stretchr/testify/assert"
 )
 
-type MockLog struct {
-	mock.Mock
-}
-
-func (m *MockLog) Fatal(message ...interface{}) {
-	m.Called(message)
-}
-
 func TestManifestFileIsInvalid(t *testing.T) {
-	origLogFatal := logFatal
-	origFileReader := fileReader
-	defer func() {
-		logFatal = origLogFatal
-		fileReader = origFileReader
-	}()
+	_, err := GetManifest("---\n123123 123123")
 
-	var mockLog MockLog
-
-	yamlError := yaml.TypeError{Errors: []string{"line 1: cannot unmarshal !!str `123123 ...` into model.Manifest"}}
-
-	mockLog.On("Fatal", []interface{}{&yamlError}).Return(nil)
-
-	logFatal = mockLog.Fatal
-
-	fileReader = func(name string) ([]byte, error) {
-		return []byte("123123 123123"), nil
+	if assert.Error(t, err) {
+		assert.Equal(t, "yaml: unmarshal errors:\n  line 2: cannot unmarshal !!str `123123 ...` into model.Manifest", err.Error())
 	}
-
-	GetManifest("fake-name")
-
-	mockLog.AssertCalled(t, "Fatal", []interface{}{&yamlError})
 }
 
 func TestManifestFileNotFound(t *testing.T) {
-	origLogFatal := logFatal
-	origFileReader := fileReader
-	defer func() {
-		logFatal = origLogFatal
-		fileReader = origFileReader
-	}()
+	_, err := GetManifest("/this/file/does/not/exist")
 
-	var mockLog MockLog
-
-	mockLog.On("Fatal", []interface{}{errors.New("Not found")}).Return(nil)
-
-	logFatal = mockLog.Fatal
-
-	fileReader = func(name string) ([]byte, error) {
-		return nil, errors.New("Not found")
+	if assert.Error(t, err) {
+		assert.Equal(t, "open /this/file/does/not/exist: no such file or directory", err.Error())
 	}
-
-	GetManifest("fake-name")
-
-	mockLog.AssertCalled(t, "Fatal", []interface{}{errors.New("Not found")})
 }
 
 func TestManifestConfigurationSectionNotFound(t *testing.T) {
-	manifestText := `---
-roles: []
-`
-
-	origLogFatal := logFatal
-	origFileReader := fileReader
-	defer func() {
-		logFatal = origLogFatal
-		fileReader = origFileReader
-	}()
-
-	var mockLog MockLog
-
-	fileReader = func(name string) ([]byte, error) {
-		return []byte(manifestText), nil
+	_, err := GetManifest("---\nroles: []")
+	if assert.Error(t, err) {
+		assert.Equal(t, "'configuration section' not found in manifest", err.Error())
 	}
-
-	mockLog.On("Fatal", []interface{}{"'configuration section' not found in manifest"}).Return(nil)
-
-	logFatal = mockLog.Fatal
-
-	GetManifest("fake-name")
-
-	mockLog.AssertCalled(t, "Fatal", []interface{}{"'configuration section' not found in manifest"})
 }

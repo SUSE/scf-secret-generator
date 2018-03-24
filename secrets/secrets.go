@@ -64,7 +64,7 @@ func NewSecretGenerator() SecretGenerator {
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
 // under a new name. Then it updates the secrets configmap to describe the updated status quo.
-func (sg *SecretGenerator) Generate(manifest model.Manifest) {
+func (sg *SecretGenerator) Generate(manifestFile string) {
 	c, err := sg.getConfigMapInterface()
 	if err != nil {
 		log.Fatal(err)
@@ -80,6 +80,10 @@ func (sg *SecretGenerator) Generate(manifest model.Manifest) {
 		log.Fatal(err)
 	}
 	if secret != nil {
+		manifest, err := model.GetManifest(manifestFile)
+		if err != nil {
+			log.Fatal(err)
+		}
 		err = sg.generateSecret(manifest, secret, configMap)
 		if err != nil {
 			log.Fatal(err)

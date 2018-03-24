@@ -4,7 +4,6 @@ import (
 	"fmt"
 	"os"
 
-	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
@@ -19,6 +18,5 @@ func main() {
 	}
 
 	sg := secrets.NewSecretGenerator()
-	manifest := model.GetManifest(os.Args[1])
-	sg.Generate(manifest)
+	sg.Generate(os.Args[1])
 }
