@@ -13,16 +13,11 @@ import (
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/cloudflare/cfssl/helpers"
 	"github.com/cloudflare/cfssl/initca"
-	"github.com/cloudflare/cfssl/log"
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
 
 	"k8s.io/api/core/v1"
 )
-
-var logFatalf = log.Fatalf
-var createCA = createCAImpl
-var createCert = createCertImpl
 
 const defaultCA = "cacert"
 
@@ -63,35 +58,39 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.Configuration
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(certInfo map[string]CertInfo, secrets *v1.Secret) {
+func GenerateCerts(certInfo map[string]CertInfo, namespace string, serviceDomainSuffix string, secrets *v1.Secret) error {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
-		if info.IsAuthority {
-			glog.Printf("- SSL CA: %s\n", id)
-
-			createCA(certInfo, secrets, id)
+		if !info.IsAuthority {
+			continue
+		}
+		glog.Printf("- SSL CA: %s\n", id)
+		err := createCA(certInfo, secrets, id)
+		if err != nil {
+			return err
 		}
 	}
 	for id, info := range certInfo {
 		if info.IsAuthority {
 			continue
 		}
-
 		glog.Printf("- SSL CRT: %s (%s / %s)\n", id, info.CertificateName, info.PrivateKeyName)
-
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		createCert(certInfo, secrets, id)
+		err := createCert(certInfo, namespace, serviceDomainSuffix, secrets, id)
+		if err != nil {
+			return err
+		}
 	}
-	return
+	return nil
 }
 
 func rsaKeyRequest() *csr.BasicKeyRequest {
 	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
 }
 
-func createCAImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
+func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string) error {
 	var err error
 	info := certInfo[id]
 
@@ -100,7 +99,7 @@ func createCAImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
 		info.Certificate = secrets.Data[info.CertificateName]
 		certInfo[id] = info
-		return
+		return nil
 	}
 
 	req := &csr.CertificateRequest{
@@ -110,55 +109,53 @@ func createCAImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
 	}
 	info.Certificate, _, info.PrivateKey, err = initca.New(req)
 	if err != nil {
-		logFatalf("Cannot create CA: %s", err)
-		return
+		return fmt.Errorf("Cannot create CA: %s", err)
 	}
 
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 
 	certInfo[id] = info
+	return nil
 }
 
 func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
-	name = util.ExpandEnvTemplates(name)
 	req.Hosts = append(req.Hosts, name)
 	if wildcard {
 		req.Hosts = append(req.Hosts, "*."+name)
 	}
 }
 
-func createCertImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string) {
+func createCert(certInfo map[string]CertInfo, namespace string, serviceDomainSuffix string, secrets *v1.Secret, id string) error {
 	var err error
 	info := certInfo[id]
 
 	if len(secrets.Data[info.PrivateKeyName]) > 0 {
-		return
+		return nil
 	}
 
 	// XXX Add support for multiple CAs
 	caInfo := certInfo[defaultCA]
 	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
-		logFatalf("CA %s not found", defaultCA)
-		return
+		return fmt.Errorf("CA %s not found", defaultCA)
 	}
 
 	req := &csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
 
 	if info.RoleName != "" {
 		addHost(req, true, info.RoleName)
-		addHost(req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc")
-		addHost(req, true, info.RoleName+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
+		addHost(req, true, fmt.Sprintf("%s.%s.svc", info.RoleName, namespace))
+		addHost(req, true, fmt.Sprintf("%s.%s.svc.cluster.local", info.RoleName, namespace))
 
 		// Generate wildcard certs for stateful sets for self-clustering roles
 		// We do this instead of having a bunch of subject alt names so that the
 		// certs can work correctly if we scale the cluster post-deployment.
 		prefix := fmt.Sprintf("*.%s-set", info.RoleName)
 		addHost(req, false, prefix)
-		addHost(req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc")
-		addHost(req, false, prefix+".{{.KUBERNETES_NAMESPACE}}.svc.cluster.local")
+		addHost(req, false, fmt.Sprintf("%s.%s.svc", prefix, namespace))
+		addHost(req, false, fmt.Sprintf("%s.%s.svc.cluster.local", prefix, namespace))
 
-		addHost(req, true, info.RoleName+".{{.KUBE_SERVICE_DOMAIN_SUFFIX}}")
+		addHost(req, true, fmt.Sprintf("%s.%s", info.RoleName, serviceDomainSuffix))
 	}
 
 	for _, name := range info.SubjectNames {
@@ -174,19 +171,16 @@ func createCertImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string)
 	g := &csr.Generator{Validator: genkey.Validator}
 	signingReq, info.PrivateKey, err = g.ProcessRequest(req)
 	if err != nil {
-		logFatalf("Cannot generate cert: %s", err)
-		return
+		return fmt.Errorf("Cannot generate cert: %s", err)
 	}
 
 	caCert, err := helpers.ParseCertificatePEM(caInfo.Certificate)
 	if err != nil {
-		logFatalf("Cannot parse CA cert: %s", err)
-		return
+		return fmt.Errorf("Cannot parse CA cert: %s", err)
 	}
 	caKey, err := helpers.ParsePrivateKeyPEM(caInfo.PrivateKey)
 	if err != nil {
-		logFatalf("Cannot parse CA private key: %s", err)
-		return
+		return fmt.Errorf("Cannot parse CA private key: %s", err)
 	}
 
 	signingProfile := &config.SigningProfile{
@@ -201,29 +195,29 @@ func createCertImpl(certInfo map[string]CertInfo, secrets *v1.Secret, id string)
 
 	s, err := local.NewSigner(caKey, caCert, signer.DefaultSigAlgo(caKey), policy)
 	if err != nil {
-		logFatalf("Cannot create signer: %s", err)
-		return
+		return fmt.Errorf("Cannot create signer: %s", err)
 	}
 
 	info.Certificate, err = s.Sign(signer.SignRequest{Request: string(signingReq)})
 	if err != nil {
-		logFatalf("Failed to sign cert: %s", err)
-		return
+		return fmt.Errorf("Failed to sign cert: %s", err)
 	}
 
 	if len(info.PrivateKeyName) == 0 {
-		logFatalf("Certificate %s created with empty private key name", id)
+		return fmt.Errorf("Certificate %s created with empty private key name", id)
 	}
 	if len(info.PrivateKey) == 0 {
-		logFatalf("Certificate %s created with empty private key", id)
+		return fmt.Errorf("Certificate %s created with empty private key", id)
 	}
 	if len(info.CertificateName) == 0 {
-		logFatalf("Certificate %s created with empty certificate name", id)
+		return fmt.Errorf("Certificate %s created with empty certificate name", id)
 	}
 	if len(info.Certificate) == 0 {
-		logFatalf("Certificate %s created with empty certificate", id)
+		return fmt.Errorf("Certificate %s created with empty certificate", id)
 	}
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 	certInfo[id] = info
+
+	return nil
 }

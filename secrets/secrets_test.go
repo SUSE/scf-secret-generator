@@ -203,6 +203,8 @@ func TestGenerateSecret(t *testing.T) {
 
 	// The subtests cannot run in parallel because there are global variables in some generators
 	t.Run("Non-generated secrets are removed", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -225,6 +227,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("New password is generated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -250,6 +254,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing password isn't updated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -275,6 +281,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing passwords is updated during rotation", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 		sg.secretsGeneration = "2"
 
@@ -301,6 +309,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing immutable password isn't updated during rotation", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 		sg.secretsGeneration = "2"
 
@@ -328,6 +338,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("New SSH key is generated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -366,6 +378,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing SSH key isn't updated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -406,6 +420,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("New SSL CA is generated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -444,6 +460,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing SSL CA isn't updated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -482,6 +500,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("New SSL cert is generated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
@@ -538,6 +558,8 @@ func TestGenerateSecret(t *testing.T) {
 	})
 
 	t.Run("Existing SSL cert isn't updated", func(t *testing.T) {
+		t.Parallel()
+
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{

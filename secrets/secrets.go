@@ -242,7 +242,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, secrets)
+	ssl.GenerateCerts(certInfo, sg.namespace, sg.serviceDomainSuffix, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)
