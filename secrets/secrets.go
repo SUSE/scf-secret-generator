@@ -27,9 +27,6 @@ const currentSecretName = "current-secrets-name"
 const currentSecretGeneration = "current-secrets-generation"
 const previousSecretName = "previous-secrets-name"
 
-var kubeClusterConfig = rest.InClusterConfig
-var kubeNewClient = kubernetes.NewForConfig
-
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
 	namespace           string
@@ -114,9 +111,9 @@ type secretInterface interface {
 func kubeClientset() (*kubernetes.Clientset, error) {
 	// Set up access to the kube API
 	var clientset *kubernetes.Clientset
-	kubeConfig, err := kubeClusterConfig()
+	kubeConfig, err := rest.InClusterConfig()
 	if err == nil {
-		clientset, err = kubeNewClient(kubeConfig)
+		clientset, err = kubernetes.NewForConfig(kubeConfig)
 	}
 	return clientset, err
 }
