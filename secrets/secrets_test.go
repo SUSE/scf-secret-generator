@@ -16,14 +16,6 @@ type MockBase struct {
 	mock.Mock
 }
 
-type MockLog struct {
-	MockBase
-}
-
-func (m *MockLog) Fatal(message ...interface{}) {
-	m.Called(message)
-}
-
 type MockSecretInterface struct {
 	MockBase
 }

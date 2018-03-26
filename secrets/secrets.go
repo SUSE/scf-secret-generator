@@ -188,10 +188,8 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
 func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
-	secretsGeneration := sg.secretsGeneration
-
-	if secretsGeneration != configMap.Data[currentSecretGeneration] {
-		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], secretsGeneration)
+	if sg.secretsGeneration != configMap.Data[currentSecretGeneration] {
+		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], sg.secretsGeneration)
 
 		immutable := make(map[string]bool)
 		for _, configVar := range manifest.Configuration.Variables {
@@ -203,7 +201,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 				delete(secrets.Data, name)
 			}
 		}
-		configMap.Data[currentSecretGeneration] = secretsGeneration
+		configMap.Data[currentSecretGeneration] = sg.secretsGeneration
 	}
 
 	sshKeys := make(map[string]ssh.Key)
