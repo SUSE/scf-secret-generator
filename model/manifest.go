@@ -2,8 +2,8 @@ package model
 
 import (
 	"errors"
+	"io"
 	"io/ioutil"
-	"strings"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -91,22 +91,16 @@ type Manifest struct {
 }
 
 // GetManifest loads a manifest from file or string
-func GetManifest(input string) (manifest Manifest, err error) {
-	var data []byte
+func GetManifest(r io.Reader) (Manifest, error) {
+	data, err := ioutil.ReadAll(r)
 
-	if strings.HasPrefix(input, "---\n") {
-		data = []byte(input)
-	} else {
-		data, err = ioutil.ReadFile(input)
-		if err != nil {
-			return
+	var manifest Manifest
+	if err == nil {
+		err = yaml.Unmarshal(data, &manifest)
+		if err == nil && manifest.Configuration == nil {
+			err = errors.New("'configuration section' not found in manifest")
 		}
 	}
 
-	err = yaml.Unmarshal(data, &manifest)
-	if err == nil && manifest.Configuration == nil {
-		err = errors.New("'configuration section' not found in manifest")
-	}
-
-	return
+	return manifest, err
 }

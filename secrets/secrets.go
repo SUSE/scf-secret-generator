@@ -3,6 +3,7 @@ package secrets
 import (
 	"fmt"
 	"log"
+	"os"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
@@ -52,7 +53,11 @@ func (sg *SecretGenerator) Generate(manifestFile string) {
 		log.Fatal(err)
 	}
 	if secret != nil {
-		manifest, err := model.GetManifest(manifestFile)
+		file, err := os.Open(manifestFile)
+		if err != nil {
+			log.Fatal(err)
+		}
+		manifest, err := model.GetManifest(file)
 		if err != nil {
 			log.Fatal(err)
 		}
