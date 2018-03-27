@@ -3,7 +3,6 @@ package secrets
 import (
 	"fmt"
 	"log"
-	"os"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
@@ -29,34 +28,10 @@ const previousSecretName = "previous-secrets-name"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
-	namespace           string
-	serviceDomainSuffix string
-	secretsName         string
-	secretsGeneration   string
-}
-
-// NewSecretGenerator returns an instance of the SecretGenerator
-func NewSecretGenerator() SecretGenerator {
-	sg := SecretGenerator{
-		namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
-		serviceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
-		secretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
-		secretsGeneration:   os.Getenv("KUBE_SECRETS_GENERATION_COUNTER"),
-	}
-	// XXX All these settings should be passed from the commandline and not the environment
-	if sg.namespace == "" {
-		log.Fatal("KUBERNETES_NAMESPACE is not set")
-	}
-	if sg.serviceDomainSuffix == "" {
-		log.Fatal("KUBE_SERVICE_DOMAIN_SUFFIX is not set")
-	}
-	if sg.secretsName == "" {
-		log.Fatal("KUBE_SECRETS_GENERATION_NAME is not set")
-	}
-	if sg.secretsGeneration == "" {
-		log.Fatal("KUBE_SECRETS_GENERATION_COUNTER is not set")
-	}
-	return sg
+	Namespace           string
+	ServiceDomainSuffix string
+	SecretsName         string
+	SecretsGeneration   string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -124,7 +99,7 @@ func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clientset.CoreV1().ConfigMaps(sg.namespace), nil
+	return clientset.CoreV1().ConfigMaps(sg.Namespace), nil
 }
 
 // GetSecretInterface returns a secrets interface for the KUBERNETES_NAMESPACE
@@ -133,7 +108,7 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	if err != nil {
 		return nil, err
 	}
-	return clientset.CoreV1().Secrets(sg.namespace), nil
+	return clientset.CoreV1().Secrets(sg.Namespace), nil
 }
 
 // GetSecretConfig returns the configmap containing the secrets configuration
@@ -157,7 +132,7 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
 func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
 	currentName := configMap.Data[currentSecretName]
 
-	newName := sg.secretsName
+	newName := sg.SecretsName
 	if newName == currentName {
 		log.Printf("Secret `%s` already exists; nothing to do\n", newName)
 		return nil, nil
@@ -188,8 +163,8 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
 func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
-	if sg.secretsGeneration != configMap.Data[currentSecretGeneration] {
-		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], sg.secretsGeneration)
+	if sg.SecretsGeneration != configMap.Data[currentSecretGeneration] {
+		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], sg.SecretsGeneration)
 
 		immutable := make(map[string]bool)
 		for _, configVar := range manifest.Configuration.Variables {
@@ -201,7 +176,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 				delete(secrets.Data, name)
 			}
 		}
-		configMap.Data[currentSecretGeneration] = sg.secretsGeneration
+		configMap.Data[currentSecretGeneration] = sg.SecretsGeneration
 	}
 
 	sshKeys := make(map[string]ssh.Key)
@@ -237,7 +212,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, sg.namespace, sg.serviceDomainSuffix, secrets)
+	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)

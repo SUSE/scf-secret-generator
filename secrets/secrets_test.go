@@ -81,10 +81,10 @@ func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap,
 
 func testingSecretGenerator() SecretGenerator {
 	sg := SecretGenerator{
-		namespace:           "namespace",
-		serviceDomainSuffix: "suffix",
-		secretsName:         "new-secret",
-		secretsGeneration:   "1",
+		Namespace:           "namespace",
+		ServiceDomainSuffix: "suffix",
+		SecretsName:         "new-secret",
+		SecretsGeneration:   "1",
 	}
 	return sg
 }
@@ -173,7 +173,7 @@ func TestGetSecret(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		sg.secretsName = "current-secret"
+		sg.SecretsName = "current-secret"
 
 		var c MockConfigMapInterface
 		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
@@ -276,7 +276,7 @@ func TestGenerateSecret(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		sg.secretsGeneration = "2"
+		sg.SecretsGeneration = "2"
 
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
@@ -304,7 +304,7 @@ func TestGenerateSecret(t *testing.T) {
 		t.Parallel()
 
 		sg := testingSecretGenerator()
-		sg.secretsGeneration = "2"
+		sg.SecretsGeneration = "2"
 
 		manifest := model.Manifest{
 			Configuration: &model.Configuration{
