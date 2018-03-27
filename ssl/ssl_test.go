@@ -280,7 +280,8 @@ func TestCreateCert(t *testing.T) {
 	t.Run("If secrets already has a private key, do nothing", func(t *testing.T) {
 		t.Parallel()
 
-		certInfo := defaultCertInfo
+		certInfo := make(map[string]CertInfo)
+		certInfo[defaultCA] = defaultCertInfo[defaultCA]
 		certInfo[certID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
@@ -377,7 +378,8 @@ func TestCreateCert(t *testing.T) {
 	t.Run("secrets.Data should have a private key and a certificate", func(t *testing.T) {
 		t.Parallel()
 
-		certInfo := defaultCertInfo
+		certInfo := make(map[string]CertInfo)
+		certInfo[defaultCA] = defaultCertInfo[defaultCA]
 		certInfo[certID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
@@ -399,7 +401,8 @@ func TestCreateCert(t *testing.T) {
 	t.Run("rolename isn't empty and the env is valid", func(t *testing.T) {
 		t.Parallel()
 
-		certInfo := defaultCertInfo
+		certInfo := make(map[string]CertInfo)
+		certInfo[defaultCA] = defaultCertInfo[defaultCA]
 		certInfo[certID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
