@@ -80,13 +80,12 @@ func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap,
 }
 
 func testingSecretGenerator() SecretGenerator {
-	sg := SecretGenerator{
+	return SecretGenerator{
 		Namespace:           "namespace",
 		ServiceDomainSuffix: "suffix",
 		SecretsName:         "new-secret",
 		SecretsGeneration:   "1",
 	}
-	return sg
 }
 
 func TestGetSecretConfig(t *testing.T) {

@@ -329,7 +329,7 @@ func TestCreateCert(t *testing.T) {
 		}
 	})
 
-	t.Run("If CA cert fails to parse, it should log a fatal error", func(t *testing.T) {
+	t.Run("If CA cert fails to parse, it should return an error", func(t *testing.T) {
 		t.Parallel()
 
 		certInfo := make(map[string]CertInfo)
@@ -352,7 +352,7 @@ func TestCreateCert(t *testing.T) {
 		}
 	})
 
-	t.Run("If CA private key fails to parse, it should log a fatal error", func(t *testing.T) {
+	t.Run("If CA private key fails to parse, it should return an error", func(t *testing.T) {
 		t.Parallel()
 
 		// Invalidate the private key of the default CA
@@ -390,8 +390,8 @@ func TestCreateCert(t *testing.T) {
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
 
 		if assert.NoError(t, err) {
-			assert.NotEqual(t, secrets.Data[certInfo[certID].PrivateKeyName], []byte{})
-			assert.NotEqual(t, secrets.Data[certInfo[certID].CertificateName], []byte{})
+			assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
+			assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
 			_, err := tls.X509KeyPair(secrets.Data[certInfo[certID].CertificateName],
 				secrets.Data[certInfo[certID].PrivateKeyName])
 			assert.NoError(t, err)

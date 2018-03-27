@@ -137,15 +137,14 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
 func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
 	currentName := configMap.Data[currentSecretName]
 
-	newName := sg.SecretsName
-	if newName == currentName {
-		log.Printf("Secret `%s` already exists; nothing to do\n", newName)
+	if sg.SecretsName == currentName {
+		log.Printf("Secret `%s` already exists; nothing to do\n", sg.SecretsName)
 		return nil, nil
 	}
 
 	newSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
-			Name: newName,
+			Name: sg.SecretsName,
 		},
 		Data: map[string][]byte{},
 	}
