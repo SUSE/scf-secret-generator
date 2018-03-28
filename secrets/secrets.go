@@ -26,6 +26,7 @@ const secretsConfigMapName = "secrets-config"
 const currentSecretName = "current-secrets-name"
 const currentSecretGeneration = "current-secrets-generation"
 const previousSecretName = "previous-secrets-name"
+const configVersion = "config-version"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
@@ -153,8 +154,6 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 		if currentName != legacySecretName {
 			return nil, fmt.Errorf("Cannot get previous version of secrets using name '%s'", currentName)
 		}
-		// This is a new installation, so make sure the configmap is created, not updated
-		configMap.Data[currentSecretName] = ""
 	}
 
 	return newSecret, nil
@@ -246,9 +245,11 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	log.Printf("Created secret `%s`\n", secrets.Name)
 
 	// update configmap
-	if configMap.Data[previousSecretName] == "" {
+	if configMap.Data[configVersion] == "" {
+		configMap.Data[configVersion] = "1"
 		_, err = c.Create(configMap)
 		if err != nil {
+			delete(configMap.Data, configVersion)
 			return fmt.Errorf("Error creating configmap %s: %s", configMap.Name, err)
 		}
 		log.Printf("Created configmap `%s`\n", configMap.Name)

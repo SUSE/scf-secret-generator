@@ -125,8 +125,6 @@ func TestGetSecret(t *testing.T) {
 			assert.Equal(t, "new-secret", secrets.Name)
 		}
 		assert.NoError(t, err)
-		assert.Empty(t, configMap.Data[currentSecretName],
-			"configmap[%s] must be empty to signal that the configmap doesn't exist yet and must be created", currentSecretName)
 	})
 
 	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
@@ -711,6 +709,7 @@ func TestUpdateSecret(t *testing.T) {
 
 		c.AssertCalled(t, "Create", configMap)
 		c.AssertNotCalled(t, "Update", configMap)
+		assert.NotEmpty(t, configMap.Data[configVersion])
 	})
 
 	t.Run("ConfigMap has current secret but not previous secret", func(t *testing.T) {
@@ -724,7 +723,10 @@ func TestUpdateSecret(t *testing.T) {
 		s.On("Delete", legacySecretName, &metav1.DeleteOptions{})
 
 		var c MockConfigMapInterface
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretName: legacySecretName}}
+		configMap := &v1.ConfigMap{Data: map[string]string{
+			configVersion:     "1",
+			currentSecretName: legacySecretName,
+		}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
 		c.On("Delete", legacySecretName, &metav1.DeleteOptions{})
@@ -752,6 +754,7 @@ func TestUpdateSecret(t *testing.T) {
 
 		var c MockConfigMapInterface
 		configMap := &v1.ConfigMap{Data: map[string]string{
+			configVersion:      "1",
 			currentSecretName:  "current-secret",
 			previousSecretName: legacySecretName,
 		}}
