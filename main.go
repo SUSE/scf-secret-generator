@@ -2,9 +2,9 @@ package main
 
 import (
 	"fmt"
+	"log"
 	"os"
 
-	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
@@ -18,17 +18,24 @@ func main() {
 		os.Exit(1)
 	}
 
-	sg := secrets.NewSecretGenerator()
-
-	manifest := model.GetManifest(os.Args[1])
-
-	c := sg.GetConfigMapInterface()
-	s := sg.GetSecretInterface()
-
-	configMap := sg.GetSecretConfig(c)
-	secret := sg.GetSecret(s, configMap)
-	if secret != nil {
-		sg.GenerateSecret(manifest, secret, configMap)
-		sg.UpdateSecret(s, secret, c, configMap)
+	sg := secrets.SecretGenerator{
+		Namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
+		ServiceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
+		SecretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
+		SecretsGeneration:   os.Getenv("KUBE_SECRETS_GENERATION_COUNTER"),
 	}
+	// XXX All these settings should be passed from the commandline and not the environment
+	if sg.Namespace == "" {
+		log.Fatal("KUBERNETES_NAMESPACE is not set")
+	}
+	if sg.ServiceDomainSuffix == "" {
+		log.Fatal("KUBE_SERVICE_DOMAIN_SUFFIX is not set")
+	}
+	if sg.SecretsName == "" {
+		log.Fatal("KUBE_SECRETS_GENERATION_NAME is not set")
+	}
+	if sg.SecretsGeneration == "" {
+		log.Fatal("KUBE_SECRETS_GENERATION_COUNTER is not set")
+	}
+	sg.Generate(os.Args[1])
 }

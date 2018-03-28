@@ -1,10 +1,11 @@
 package model
 
 import (
+	"errors"
+	"io"
 	"io/ioutil"
-	"log"
 
-	"gopkg.in/yaml.v2"
+	yaml "gopkg.in/yaml.v2"
 )
 
 // GeneratorType describes the type of generator used for the configuration value
@@ -89,26 +90,17 @@ type Manifest struct {
 	Configuration *Configuration `yaml:"configuration"`
 }
 
-var logFatal = log.Fatal
-var fileReader = ioutil.ReadFile
+// GetManifest loads a manifest from file or string
+func GetManifest(r io.Reader) (Manifest, error) {
+	data, err := ioutil.ReadAll(r)
 
-// GetManifest loads a manifest from file
-func GetManifest(name string) (manifest Manifest) {
-	manifestFile, err := fileReader(name)
-	if err != nil {
-		logFatal(err)
-		return
+	var manifest Manifest
+	if err == nil {
+		err = yaml.Unmarshal(data, &manifest)
+		if err == nil && manifest.Configuration == nil {
+			err = errors.New("'configuration section' not found in manifest")
+		}
 	}
 
-	if err = yaml.Unmarshal(manifestFile, &manifest); err != nil {
-		logFatal(err)
-		return
-	}
-
-	if manifest.Configuration == nil {
-		logFatal("'configuration section' not found in manifest")
-		return
-	}
-
-	return
+	return manifest, err
 }
