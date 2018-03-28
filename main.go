@@ -37,5 +37,12 @@ func main() {
 	if sg.SecretsGeneration == "" {
 		log.Fatal("KUBE_SECRETS_GENERATION_COUNTER is not set")
 	}
-	sg.Generate(os.Args[1])
+
+	file, err := os.Open(os.Args[1])
+	if err == nil {
+		err = sg.Generate(file)
+	}
+	if err != nil {
+		log.Fatal(err)
+	}
 }

@@ -2,8 +2,8 @@ package secrets
 
 import (
 	"fmt"
+	"io"
 	"log"
-	"os"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
@@ -37,39 +37,36 @@ type SecretGenerator struct {
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
 // under a new name. Then it updates the secrets configmap to describe the updated status quo.
-func (sg *SecretGenerator) Generate(manifestFile string) {
+func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	c, err := sg.getConfigMapInterface()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	s, err := sg.getSecretInterface()
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	configMap := sg.getSecretConfig(c)
 	secret, err := sg.getSecret(s, configMap)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 	if secret != nil {
-		file, err := os.Open(manifestFile)
+		manifest, err := model.GetManifest(manifestReader)
 		if err != nil {
-			log.Fatal(err)
-		}
-		manifest, err := model.GetManifest(file)
-		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		err = sg.generateSecret(manifest, secret, configMap)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 		err = sg.updateSecret(s, secret, c, configMap)
 		if err != nil {
-			log.Fatal(err)
+			return err
 		}
 	}
+	return nil
 }
 
 // configMapInterface is a subset of v1.ConfigMapInterface
