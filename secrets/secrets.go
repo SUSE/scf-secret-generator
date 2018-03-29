@@ -30,6 +30,7 @@ const configVersion = "config-version"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
+	Domain              string
 	Namespace           string
 	ServiceDomainSuffix string
 	SecretsName         string
@@ -96,7 +97,7 @@ func kubeClientset() (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
-// GetConfigMapInterface returns a configmap interface for the KUBERNETES_NAMESPACE
+// GetConfigMapInterface returns a configmap interface for the namespace
 func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
@@ -105,7 +106,7 @@ func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	return clientset.CoreV1().ConfigMaps(sg.Namespace), nil
 }
 
-// GetSecretInterface returns a secrets interface for the KUBERNETES_NAMESPACE
+// GetSecretInterface returns a secrets interface for the namespace
 func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
@@ -212,7 +213,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, secrets)
+	ssl.GenerateCerts(certInfo, sg.Namespace, sg.Domain, sg.ServiceDomainSuffix, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)
