@@ -1,7 +1,9 @@
 package ssl
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	glog "log"
 	"os"
 	"time"
@@ -58,7 +60,7 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.Configuration
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(certInfo map[string]CertInfo, namespace string, serviceDomainSuffix string, secrets *v1.Secret) error {
+func GenerateCerts(certInfo map[string]CertInfo, namespace, domain, serviceDomainSuffix string, secrets *v1.Secret) error {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if !info.IsAuthority {
@@ -78,7 +80,7 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace string, serviceDomain
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		err := createCert(certInfo, namespace, serviceDomainSuffix, secrets, id)
+		err := createCert(certInfo, namespace, domain, serviceDomainSuffix, secrets, id)
 		if err != nil {
 			return err
 		}
@@ -126,7 +128,7 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(certInfo map[string]CertInfo, namespace string, serviceDomainSuffix string, secrets *v1.Secret, id string) error {
+func createCert(certInfo map[string]CertInfo, namespace, domain, serviceDomainSuffix string, secrets *v1.Secret, id string) error {
 	var err error
 	info := certInfo[id]
 
@@ -159,7 +161,21 @@ func createCert(certInfo map[string]CertInfo, namespace string, serviceDomainSuf
 	}
 
 	for _, name := range info.SubjectNames {
-		addHost(req, false, name)
+		t, err := template.New("").Parse(name)
+		if err != nil {
+			return fmt.Errorf("Can't parse subject name '%s' for certificate '%s': %s", name, id, err)
+		}
+		buf := &bytes.Buffer{}
+		mapping := map[string]string{
+			"DOMAIN":                     domain,
+			"KUBERNETES_NAMESPACE":       namespace,
+			"KUBE_SERVICE_DOMAIN_SUFFIX": serviceDomainSuffix,
+		}
+		err = t.Execute(buf, mapping)
+		if err != nil {
+			return err
+		}
+		addHost(req, false, buf.String())
 	}
 
 	if len(req.Hosts) == 0 {

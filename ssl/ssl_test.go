@@ -138,7 +138,7 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err := GenerateCerts(certInfo, "namespace", "domain", "suffix", secrets)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data[certInfo[defaultCA].PrivateKeyName])
@@ -165,7 +165,7 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err := GenerateCerts(certInfo, "namespace", "domain", "suffix", secrets)
 
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
@@ -180,7 +180,7 @@ func TestGenerateCerts(t *testing.T) {
 			SubjectNames:    []string{"subject-names"},
 			RoleName:        "dummy-role",
 		}
-		err = GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err = GenerateCerts(certInfo, "namespace", "domain", "suffix", secrets)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
@@ -291,7 +291,7 @@ func TestCreateCert(t *testing.T) {
 		secrets.Data["private-key"] = []byte("private-key-data")
 		secrets.Data["certificate-name"] = []byte("certificate-data")
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		assert.NoError(t, err)
 		assert.Equal(t, []byte("private-key-data"), secrets.Data["private-key"])
@@ -307,7 +307,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
@@ -323,7 +323,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
 		}
@@ -345,7 +345,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "Cannot parse CA cert")
@@ -368,7 +368,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "Cannot parse CA private key")
@@ -387,7 +387,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		if assert.NoError(t, err) {
 			assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
@@ -406,12 +406,16 @@ func TestCreateCert(t *testing.T) {
 		certInfo[certID] = CertInfo{
 			PrivateKeyName:  "private-key",
 			CertificateName: "certificate-name",
-			SubjectNames:    []string{},
-			RoleName:        "dummy-role",
+			SubjectNames: []string{
+				"*.{{.DOMAIN}}",
+				"foo.{{.KUBERNETES_NAMESPACE}}",
+				"svc.{{.KUBE_SERVICE_DOMAIN_SUFFIX}}",
+			},
+			RoleName: "dummy-role",
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "domain", "suffix", secrets, certID)
 
 		if !assert.NoError(t, err) {
 			return
@@ -428,6 +432,9 @@ func TestCreateCert(t *testing.T) {
 			assert.Contains(t, cert.DNSNames, "dummy-role.namespace.svc.cluster.local")
 			assert.Contains(t, cert.DNSNames, "*.dummy-role-set.namespace.svc.cluster.local")
 			assert.Contains(t, cert.DNSNames, "dummy-role.suffix")
+			assert.Contains(t, cert.DNSNames, "*.domain")
+			assert.Contains(t, cert.DNSNames, "foo.namespace")
+			assert.Contains(t, cert.DNSNames, "svc.suffix")
 			assert.NotContains(t, cert.DNSNames, "dummy-role-set")
 			assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
 		}

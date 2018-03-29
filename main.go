@@ -19,12 +19,16 @@ func main() {
 	}
 
 	sg := secrets.SecretGenerator{
+		Domain:              os.Getenv("DOMAIN"),
 		Namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
 		ServiceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
 		SecretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
 		SecretsGeneration:   os.Getenv("KUBE_SECRETS_GENERATION_COUNTER"),
 	}
 	// XXX All these settings should be passed from the commandline and not the environment
+	if sg.Domain == "" {
+		log.Fatal("DOMAIN is not set")
+	}
 	if sg.Namespace == "" {
 		log.Fatal("KUBERNETES_NAMESPACE is not set")
 	}
