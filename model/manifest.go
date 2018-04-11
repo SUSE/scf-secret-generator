@@ -17,6 +17,7 @@ const (
 	GeneratorTypeSSH           = GeneratorType("SSH")           // SSH key
 	GeneratorTypeCACertificate = GeneratorType("CACertificate") // CA Certificate
 	GeneratorTypeCertificate   = GeneratorType("Certificate")   // Certificate
+	GeneratorTypeRotation      = GeneratorType("Rotation")      // From a previous secret
 )
 
 // ValueType describes the type of generator used for the configuration value
@@ -37,6 +38,7 @@ type ConfigurationVariableGenerator struct {
 	ValueType    ValueType     `yaml:"value_type,omitempty"`
 	SubjectNames []string      `yaml:"subject_names,omitempty"`
 	RoleName     string        `yaml:"role_name,omitempty"`
+	PreviousName string        `yaml:"previous_name,omitempty"`
 }
 
 // ConfigurationVariable is a configuration to be exposed to the IaaS

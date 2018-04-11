@@ -171,8 +171,29 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		for _, configVar := range manifest.Configuration.Variables {
 			immutable[util.ConvertNameToKey(configVar.Name)] = configVar.Immutable
 		}
+
+		// Handle secrets from rotation before we erase values
+		rotationSecrets := make(map[string]struct{})
+		for _, configVar := range manifest.Configuration.Variables {
+			if !configVar.Secret || configVar.Generator == nil {
+				continue
+			}
+			if configVar.Generator.Type != model.GeneratorTypeRotation {
+				continue
+			}
+			oldSecretKey := util.ConvertNameToKey(configVar.Generator.PreviousName)
+			newSecretKey := util.ConvertNameToKey(configVar.Name)
+			if secrets.Data[oldSecretKey] != nil {
+				log.Printf("Maintaining previous secret %s in %s\n", oldSecretKey, newSecretKey)
+			} else {
+				log.Printf("Previous secret %s is missing, %s left empty\n", oldSecretKey, newSecretKey)
+			}
+			secrets.Data[newSecretKey] = secrets.Data[oldSecretKey]
+			rotationSecrets[newSecretKey] = struct{}{}
+		}
+
 		for name := range secrets.Data {
-			if !immutable[name] {
+			if _, ok := rotationSecrets[name]; !immutable[name] && !ok {
 				log.Printf("  Resetting %s\n", name)
 				delete(secrets.Data, name)
 			}
@@ -199,6 +220,12 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 		case model.GeneratorTypeSSH:
 			ssh.RecordKeyInfo(sshKeys, configVar)
+
+		case model.GeneratorTypeRotation:
+			secretKey := util.ConvertNameToKey(configVar.Name)
+			if _, ok := secrets.Data[secretKey]; !ok {
+				secrets.Data[secretKey] = []byte(fmt.Sprintf("%v", configVar.Default))
+			}
 
 		default:
 			log.Printf("Warning: variable %s has unknown generator type %s\n", configVar.Name, configVar.Generator.Type)
@@ -237,6 +264,7 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	var obsoleteSecretName = configMap.Data[previousSecretName]
 	configMap.Data[previousSecretName] = configMap.Data[currentSecretName]
 	configMap.Data[currentSecretName] = secrets.Name
+	secrets.Data[previousSecretName] = []byte(configMap.Data[previousSecretName])
 
 	// create new secret
 	_, err := s.Create(secrets)
