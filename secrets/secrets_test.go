@@ -190,7 +190,6 @@ func TestGetSecret(t *testing.T) {
 func TestGenerateSecret(t *testing.T) {
 	t.Parallel()
 
-	// The subtests cannot run in parallel because there are global variables in some generators
 	t.Run("Non-generated secrets are removed", func(t *testing.T) {
 		t.Parallel()
 
@@ -604,6 +603,47 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 	})
 
+	t.Run("Rotational secrets are correctly maintained", func(t *testing.T) {
+		t.Parallel()
+
+		sg := testingSecretGenerator()
+
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "generated",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type: model.GeneratorTypePassword,
+						},
+					},
+					{
+						Name:   "previous",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							Type:         model.GeneratorTypeRotation,
+							PreviousName: "generated",
+						},
+					},
+				},
+			},
+		}
+
+		secrets := &v1.Secret{Data: map[string][]byte{
+			"generated": []byte("old-value"),
+		}}
+		configMap := &v1.ConfigMap{Data: map[string]string{
+			currentSecretGeneration: "0",
+		}}
+
+		assert.NotEmpty(t, secrets.Data["generated"])
+		assert.Empty(t, secrets.Data["previous"])
+		sg.generateSecret(manifest, secrets, configMap)
+		assert.NotEmpty(t, secrets.Data["generated"])
+		assert.NotEqual(t, "old-value", string(secrets.Data["generated"]))
+		assert.Equal(t, "old-value", string(secrets.Data["previous"]))
+	})
 }
 
 func TestMigrateRenamedVariable(t *testing.T) {
@@ -740,6 +780,8 @@ func TestUpdateSecret(t *testing.T) {
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)
+
+		assert.Equal(t, legacySecretName, string(secrets.Data[previousSecretName]))
 	})
 
 	t.Run("ConfigMap has current and previous secret", func(t *testing.T) {
@@ -771,5 +813,7 @@ func TestUpdateSecret(t *testing.T) {
 
 		c.AssertNotCalled(t, "Create", configMap)
 		c.AssertCalled(t, "Update", configMap)
+
+		assert.Equal(t, "current-secret", string(secrets.Data[previousSecretName]))
 	})
 }
