@@ -81,6 +81,7 @@ func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap,
 
 func testingSecretGenerator() SecretGenerator {
 	return SecretGenerator{
+		Domain:              "domain",
 		Namespace:           "namespace",
 		ServiceDomainSuffix: "suffix",
 		SecretsName:         "new-secret",
@@ -185,6 +186,40 @@ func TestGetSecret(t *testing.T) {
 		assert.Nil(t, secrets)
 		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
 	})
+}
+
+func TestExpandTemplates(t *testing.T) {
+	t.Parallel()
+
+	sg := testingSecretGenerator()
+
+	manifest := model.Manifest{
+		Configuration: &model.Configuration{
+			Variables: []*model.ConfigurationVariable{
+				{
+					Name:   "ssl-cert",
+					Secret: true,
+					Generator: &model.ConfigurationVariableGenerator{
+						ID:        "sslcert",
+						Type:      model.GeneratorTypeCertificate,
+						ValueType: model.ValueTypeCertificate,
+						SubjectNames: []string{
+							"*.{{.DOMAIN}}",
+							"foo.{{.KUBERNETES_NAMESPACE}}",
+							"svc.{{.KUBE_SERVICE_DOMAIN_SUFFIX}}"},
+					},
+				},
+			},
+		},
+	}
+
+	err := sg.expandTemplates(manifest)
+	assert.NoError(t, err)
+	names := manifest.Configuration.Variables[0].Generator.SubjectNames
+	assert.Len(t, names, 3)
+	assert.Equal(t, "*.domain", names[0])
+	assert.Equal(t, "foo.namespace", names[1])
+	assert.Equal(t, "svc.suffix", names[2])
 }
 
 func TestGenerateSecret(t *testing.T) {

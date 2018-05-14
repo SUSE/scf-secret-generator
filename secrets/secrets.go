@@ -1,7 +1,9 @@
 package secrets
 
 import (
+	"bytes"
 	"fmt"
+	"html/template"
 	"io"
 	"log"
 
@@ -56,6 +58,10 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	}
 	if secret != nil {
 		manifest, err := model.GetManifest(manifestReader)
+		if err != nil {
+			return err
+		}
+		err = sg.expandTemplates(manifest)
 		if err != nil {
 			return err
 		}
@@ -160,6 +166,32 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 	return newSecret, nil
 }
 
+func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
+	mapping := map[string]string{
+		"DOMAIN":                     sg.Domain,
+		"KUBERNETES_NAMESPACE":       sg.Namespace,
+		"KUBE_SERVICE_DOMAIN_SUFFIX": sg.ServiceDomainSuffix,
+	}
+	for _, configVar := range manifest.Configuration.Variables {
+		if configVar.Generator == nil {
+			continue
+		}
+		for index, name := range configVar.Generator.SubjectNames {
+			t, err := template.New("").Parse(name)
+			if err != nil {
+				return fmt.Errorf("Can't parse subject name '%s' for config variable '%s': %s", name, configVar.Name, err)
+			}
+			buf := &bytes.Buffer{}
+			err = t.Execute(buf, mapping)
+			if err != nil {
+				return err
+			}
+			configVar.Generator.SubjectNames[index] = buf.String()
+		}
+	}
+	return nil
+}
+
 // GenerateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
@@ -213,7 +245,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, sg.Namespace, sg.Domain, sg.ServiceDomainSuffix, secrets)
+	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)
