@@ -1,10 +1,12 @@
 package secrets
 
 import (
+	"encoding/json"
 	"errors"
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
+	"github.com/SUSE/scf-secret-generator/util"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
@@ -77,6 +79,12 @@ func (m *MockConfigMapInterface) Get(name string, options metav1.GetOptions) (*v
 func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap, error) {
 	m.Called(configMap)
 	return nil, nil
+}
+
+func setSecret(secrets *v1.Secret, configVar *model.ConfigurationVariable, value string) {
+	name := util.ConvertNameToKey(configVar.Name)
+	secrets.Data[name] = []byte(value)
+	secrets.Data[name+generatorInputSuffix], _ = json.Marshal(configVar.Generator)
 }
 
 func testingSecretGenerator() SecretGenerator {
@@ -273,8 +281,10 @@ func TestGenerateSecret(t *testing.T) {
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["dirty"])
+		assert.Empty(t, secrets.Data["dirty"+generatorInputSuffix])
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["dirty"])
+		assert.NotEmpty(t, secrets.Data["dirty"+generatorInputSuffix])
 	})
 
 	t.Run("Existing password isn't updated", func(t *testing.T) {
@@ -299,7 +309,7 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["clean"] = []byte("clean")
+		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
@@ -327,7 +337,7 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["clean"] = []byte("clean")
+		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.NotEqual(t, []byte("clean"), secrets.Data["clean"])
 	})
@@ -356,7 +366,7 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["clean"] = []byte("clean")
+		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
@@ -395,10 +405,14 @@ func TestGenerateSecret(t *testing.T) {
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ssh-key"])
+		assert.Empty(t, secrets.Data["ssh-key"+generatorInputSuffix])
 		assert.Empty(t, secrets.Data["ssh-key-fingerprint"])
+		assert.Empty(t, secrets.Data["ssh-key-fingerprint"+generatorInputSuffix])
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
+		assert.NotEmpty(t, secrets.Data["ssh-key"+generatorInputSuffix])
 		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
+		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"+generatorInputSuffix])
 	})
 
 	t.Run("Existing SSH key isn't updated", func(t *testing.T) {
@@ -434,8 +448,8 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["ssh-key"] = []byte("key")
-		secrets.Data["ssh-key-fingerprint"] = []byte("fingerprint")
+		setSecret(secrets, manifest.Configuration.Variables[0], "key")
+		setSecret(secrets, manifest.Configuration.Variables[1], "fingerprint")
 
 		sg.generateSecret(manifest, secrets, configMap)
 
@@ -477,10 +491,14 @@ func TestGenerateSecret(t *testing.T) {
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ca-cert"])
+		assert.Empty(t, secrets.Data["ca-cert"+generatorInputSuffix])
 		assert.Empty(t, secrets.Data["ca-key"])
+		assert.Empty(t, secrets.Data["ca-key"+generatorInputSuffix])
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
+		assert.NotEmpty(t, secrets.Data["ca-cert"+generatorInputSuffix])
 		assert.NotEmpty(t, secrets.Data["ca-key"])
+		assert.NotEmpty(t, secrets.Data["ca-key"+generatorInputSuffix])
 	})
 
 	t.Run("Existing SSL CA isn't updated", func(t *testing.T) {
@@ -516,8 +534,8 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["ca-cert"] = []byte("cert")
-		secrets.Data["ca-key"] = []byte("key")
+		setSecret(secrets, manifest.Configuration.Variables[0], "cert")
+		setSecret(secrets, manifest.Configuration.Variables[1], "key")
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ca-key"])
@@ -575,10 +593,14 @@ func TestGenerateSecret(t *testing.T) {
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
 		assert.Empty(t, secrets.Data["ssl-cert"])
+		assert.Empty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
 		assert.Empty(t, secrets.Data["ssl-key"])
+		assert.Empty(t, secrets.Data["ssl-key"+generatorInputSuffix])
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
 		assert.NotEmpty(t, secrets.Data["ssl-key"])
+		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorInputSuffix])
 	})
 
 	t.Run("Existing SSL cert isn't updated", func(t *testing.T) {
@@ -632,13 +654,83 @@ func TestGenerateSecret(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
 
-		secrets.Data["ssl-cert"] = []byte("cert")
-		secrets.Data["ssl-key"] = []byte("key")
+		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
+		setSecret(secrets, manifest.Configuration.Variables[3], "key")
 		sg.generateSecret(manifest, secrets, configMap)
 		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 	})
 
+	t.Run("Existing SSL cert is updated when SubjectNames change", func(t *testing.T) {
+		t.Parallel()
+
+		sg := testingSecretGenerator()
+
+		manifest := model.Manifest{
+			Configuration: &model.Configuration{
+				Variables: []*model.ConfigurationVariable{
+					{
+						Name:   "ca-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ca-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "cacert",
+							Type:      model.GeneratorTypeCACertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+					{
+						Name:   "ssl-cert",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:   "ssl-key",
+						Secret: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "sslcert",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
+				},
+			},
+		}
+
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+
+		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
+		setSecret(secrets, manifest.Configuration.Variables[3], "key")
+
+		manifest.Configuration.Variables[2].Generator.SubjectNames = []string{"*.domain"}
+
+		assert.NotEmpty(t, secrets.Data["ssl-cert"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
+		assert.NotEmpty(t, secrets.Data["ssl-key"])
+		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorInputSuffix])
+
+		sg.generateSecret(manifest, secrets, configMap)
+
+		assert.NotEmpty(t, secrets.Data["ssl-cert"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
+		assert.NotEmpty(t, secrets.Data["ssl-key"])
+		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorInputSuffix])
+		assert.NotEqual(t, []byte("cert"), secrets.Data["ssl-cert"])
+		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-key"])
+	})
 }
 
 func TestMigrateRenamedVariable(t *testing.T) {

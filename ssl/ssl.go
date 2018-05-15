@@ -94,7 +94,7 @@ func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string) error
 	var err error
 	info := certInfo[id]
 
-	if len(secrets.Data[info.PrivateKeyName]) > 0 {
+	if len(secrets.Data[info.PrivateKeyName]) > 0 && len(secrets.Data[info.CertificateName]) > 0 {
 		// fetch CA from secrets because we may need it to sign new certs
 		info.PrivateKey = secrets.Data[info.PrivateKeyName]
 		info.Certificate = secrets.Data[info.CertificateName]
@@ -130,7 +130,9 @@ func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix str
 	var err error
 	info := certInfo[id]
 
-	if len(secrets.Data[info.PrivateKeyName]) > 0 {
+	// Just one of the fields may be deleted by changes to the generator input.
+	// Need to generate a new cert if either is missing.
+	if len(secrets.Data[info.PrivateKeyName]) > 0 && len(secrets.Data[info.CertificateName]) > 0 {
 		return nil
 	}
 

@@ -2,10 +2,12 @@ package secrets
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"io"
 	"log"
+	"strings"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/password"
@@ -29,6 +31,9 @@ const currentSecretName = "current-secrets-name"
 const currentSecretGeneration = "current-secrets-generation"
 const previousSecretName = "previous-secrets-name"
 const configVersion = "config-version"
+
+// The generatorInputSuffix is appended to a secret name to store the generator config used to create the current value
+const generatorInputSuffix = ".generator"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
@@ -201,12 +206,14 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 		immutable := make(map[string]bool)
 		for _, configVar := range manifest.Configuration.Variables {
-			immutable[util.ConvertNameToKey(configVar.Name)] = configVar.Immutable
+			name := util.ConvertNameToKey(configVar.Name)
+			immutable[name] = configVar.Immutable
 		}
 		for name := range secrets.Data {
-			if !immutable[name] {
+			if !immutable[name] && !strings.HasSuffix(name, generatorInputSuffix) {
 				log.Printf("  Resetting %s\n", name)
 				delete(secrets.Data, name)
+				delete(secrets.Data, name+generatorInputSuffix)
 			}
 		}
 		configMap.Data[currentSecretGeneration] = sg.SecretsGeneration
@@ -222,6 +229,23 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 			continue
 		}
 		migrateRenamedVariable(secrets, configVar)
+
+		// create normalized representation of generator input parameters. SubjectName templates
+		// are already expanded; JSON marshaller sorts mapping keys and emits struct fields in
+		// the same order as they are defined in the source code.
+		generatorInput, err := json.Marshal(configVar.Generator)
+		if err != nil {
+			return fmt.Errorf("Can't convert %s generator config into JSON: %s", configVar.Name, err)
+		}
+
+		// if generator input has changed, then the secret needs to be regenerated
+		name := util.ConvertNameToKey(configVar.Name)
+		if !bytes.Equal(secrets.Data[name+generatorInputSuffix], generatorInput) {
+			log.Printf("Variable %s must be regenerated because the Generator options have changed\n", configVar.Name)
+			delete(secrets.Data, name)
+			secrets.Data[name+generatorInputSuffix] = generatorInput
+		}
+
 		switch configVar.Generator.Type {
 		case model.GeneratorTypePassword:
 			password.GeneratePassword(secrets, configVar.Name)
@@ -253,8 +277,9 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		generatedSecret[util.ConvertNameToKey(configVar.Name)] = configVar.Secret && configVar.Generator != nil
 	}
 	for name := range secrets.Data {
-		if !generatedSecret[name] {
+		if !generatedSecret[name] && !strings.HasSuffix(name, generatorInputSuffix) {
 			delete(secrets.Data, name)
+			delete(secrets.Data, name+generatorInputSuffix)
 		}
 	}
 
@@ -307,10 +332,12 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) {
 	name := util.ConvertNameToKey(configVar.Name)
 	if len(secrets.Data[name]) == 0 {
-		for _, previousName := range configVar.PreviousNames {
-			previousValue := secrets.Data[util.ConvertNameToKey(previousName)]
+		for _, previous := range configVar.PreviousNames {
+			previousName := util.ConvertNameToKey(previous)
+			previousValue := secrets.Data[previousName]
 			if len(previousValue) > 0 {
 				secrets.Data[name] = previousValue
+				secrets.Data[name+generatorInputSuffix] = secrets.Data[previousName+generatorInputSuffix]
 				return
 			}
 		}
