@@ -21,27 +21,30 @@ import (
 	"k8s.io/client-go/rest"
 )
 
+// The name of the secrets configmap
+const defaultSecretsConfigMapName = "secrets-config"
+
 // The unversioned name of the secret used by legacy versions of the secrets generator
 const legacySecretName = "secret"
-
-// The name of the secrets configmap
-const secretsConfigMapName = "secrets-config"
 
 const currentSecretName = "current-secrets-name"
 const currentSecretGeneration = "current-secrets-generation"
 const previousSecretName = "previous-secrets-name"
 const configVersion = "config-version"
 
+const currentConfigVersion = "1"
+
 // The generatorInputSuffix is appended to a secret name to store the generator config used to create the current value
 const generatorInputSuffix = ".generator"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
-	Domain              string
-	Namespace           string
-	ServiceDomainSuffix string
-	SecretsName         string
-	SecretsGeneration   string
+	Domain               string
+	Namespace            string
+	ServiceDomainSuffix  string
+	SecretsName          string
+	SecretsGeneration    string
+	SecretsConfigMapName string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -55,7 +58,9 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-
+	if sg.SecretsConfigMapName == "" {
+		sg.SecretsConfigMapName = defaultSecretsConfigMapName
+	}
 	configMap := sg.getSecretConfig(c)
 	secret, err := sg.getSecret(s, configMap)
 	if err != nil {
@@ -128,11 +133,17 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 
 // GetSecretConfig returns the configmap containing the secrets configuration
 func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
-	configMap, err := c.Get(secretsConfigMapName, metav1.GetOptions{})
+	configMap, err := c.Get(sg.SecretsConfigMapName, metav1.GetOptions{})
+	if err == nil && configMap.Data[configVersion] == "" {
+		// Assume pre-release configMap without version is compatible with initial release
+		// Setting configVersion here also tells updateSecret() that the configMap
+		// needs to be updated and not created
+		configMap.Data[configVersion] = currentConfigVersion
+	}
 	if err != nil {
 		configMap = &v1.ConfigMap{
 			ObjectMeta: metav1.ObjectMeta{
-				Name: secretsConfigMapName,
+				Name: sg.SecretsConfigMapName,
 			},
 			Data: map[string]string{},
 		}
@@ -304,7 +315,7 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 
 	// update configmap
 	if configMap.Data[configVersion] == "" {
-		configMap.Data[configVersion] = "1"
+		configMap.Data[configVersion] = currentConfigVersion
 		_, err = c.Create(configMap)
 		if err != nil {
 			delete(configMap.Data, configVersion)

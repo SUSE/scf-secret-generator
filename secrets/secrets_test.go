@@ -73,7 +73,23 @@ func (m *MockConfigMapInterface) Delete(name string, options *metav1.DeleteOptio
 
 func (m *MockConfigMapInterface) Get(name string, options metav1.GetOptions) (*v1.ConfigMap, error) {
 	m.Called(name, options)
-	return nil, errors.New("not found")
+	if name == defaultSecretsConfigMapName {
+		return nil, errors.New("not found")
+	}
+
+	configMap := &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Data: map[string]string{},
+	}
+	// Set to non-default values
+	configMap.Data[currentSecretName] = "my-secret-name"
+	configMap.Data[currentSecretGeneration] = "5"
+	if name != "legacy" {
+		configMap.Data[configVersion] = "2"
+	}
+	return configMap, nil
 }
 
 func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap, error) {
@@ -89,28 +105,70 @@ func setSecret(secrets *v1.Secret, configVar *model.ConfigurationVariable, value
 
 func testingSecretGenerator() SecretGenerator {
 	return SecretGenerator{
-		Domain:              "domain",
-		Namespace:           "namespace",
-		ServiceDomainSuffix: "suffix",
-		SecretsName:         "new-secret",
-		SecretsGeneration:   "1",
+		Domain:               "domain",
+		Namespace:            "namespace",
+		ServiceDomainSuffix:  "suffix",
+		SecretsName:          "new-secret",
+		SecretsGeneration:    "1",
+		SecretsConfigMapName: defaultSecretsConfigMapName,
 	}
 }
 
 func TestGetSecretConfig(t *testing.T) {
 	t.Parallel()
 
-	sg := testingSecretGenerator()
+	t.Run("ConfigMap doesn't exist yet", func(t *testing.T) {
+		t.Parallel()
 
-	var c MockConfigMapInterface
-	c.On("Get", secretsConfigMapName, metav1.GetOptions{})
-	configMap := sg.getSecretConfig(&c)
+		sg := testingSecretGenerator()
 
-	if assert.NotNil(t, configMap) {
-		assert.Equal(t, secretsConfigMapName, configMap.Name)
-		assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
-		assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
-	}
+		var c MockConfigMapInterface
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
+		configMap := sg.getSecretConfig(&c)
+
+		if assert.NotNil(t, configMap) {
+			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+			assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
+			assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
+			assert.Empty(t, configMap.Data[configVersion])
+		}
+	})
+
+	t.Run("ConfigMap already exists", func(t *testing.T) {
+		t.Parallel()
+
+		sg := testingSecretGenerator()
+		sg.SecretsConfigMapName = "non-default-name"
+
+		var c MockConfigMapInterface
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
+		configMap := sg.getSecretConfig(&c)
+
+		if assert.NotNil(t, configMap) {
+			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+			assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
+			assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
+			assert.Equal(t, "2", configMap.Data[configVersion])
+		}
+	})
+
+	t.Run("ConfigMap exists but has no config-version", func(t *testing.T) {
+		t.Parallel()
+
+		sg := testingSecretGenerator()
+		sg.SecretsConfigMapName = "legacy"
+
+		var c MockConfigMapInterface
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
+		configMap := sg.getSecretConfig(&c)
+
+		if assert.NotNil(t, configMap) {
+			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+			assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
+			assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
+			assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
+		}
+	})
 }
 
 func TestGetSecret(t *testing.T) {
@@ -122,7 +180,7 @@ func TestGetSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		var c MockConfigMapInterface
-		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 
 		var s MockSecretInterface
@@ -142,7 +200,7 @@ func TestGetSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		var c MockConfigMapInterface
-		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 		configMap.Data[currentSecretName] = "missing"
 
@@ -160,7 +218,7 @@ func TestGetSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		var c MockConfigMapInterface
-		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 		configMap.Data[currentSecretName] = "current-secret"
 
@@ -182,7 +240,7 @@ func TestGetSecret(t *testing.T) {
 		sg.SecretsName = "current-secret"
 
 		var c MockConfigMapInterface
-		c.On("Get", secretsConfigMapName, metav1.GetOptions{})
+		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 		configMap.Data[currentSecretName] = "current-secret"
 
