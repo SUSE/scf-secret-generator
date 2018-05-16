@@ -31,12 +31,15 @@ const (
 
 // ConfigurationVariableGenerator describes how to automatically generate values
 // for a configuration variable
+// WARNING: Avoid re-ordering the fields; that would trigger secrets re-generation because
+// it changes the serialized generator input strings. For the same reason additional fields
+// should be added with the omitempty attribute.
 type ConfigurationVariableGenerator struct {
-	ID           string        `yaml:"id,omitempty"`
-	Type         GeneratorType `yaml:"type"`
-	ValueType    ValueType     `yaml:"value_type,omitempty"`
-	SubjectNames []string      `yaml:"subject_names,omitempty"`
-	RoleName     string        `yaml:"role_name,omitempty"`
+	ID           string        `json:"id,omitempty" yaml:"id,omitempty"`
+	Type         GeneratorType `json:"type" yaml:"type"`
+	ValueType    ValueType     `json:"value_type,omitempty" yaml:"value_type,omitempty"`
+	SubjectNames []string      `json:"subject_names,omitempty" yaml:"subject_names,omitempty"`
+	RoleName     string        `json:"role_name,omitempty" yaml:"role_name,omitempty"`
 }
 
 // ConfigurationVariable is a configuration to be exposed to the IaaS
