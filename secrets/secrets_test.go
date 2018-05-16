@@ -719,6 +719,8 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
+		assert.NotContains(t, string(secrets.Data["ssl-cert"+generatorInputSuffix]), "subject_names")
+
 		assert.NotEmpty(t, secrets.Data["ssl-key"])
 		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorInputSuffix])
 
@@ -726,8 +728,11 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
+		assert.Contains(t, string(secrets.Data["ssl-cert"+generatorInputSuffix]), "subject_names")
+
 		assert.NotEmpty(t, secrets.Data["ssl-key"])
 		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorInputSuffix])
+
 		assert.NotEqual(t, []byte("cert"), secrets.Data["ssl-cert"])
 		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-key"])
 	})
