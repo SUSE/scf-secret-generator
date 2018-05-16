@@ -62,7 +62,10 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if sg.SecretsConfigMapName == "" {
 		sg.SecretsConfigMapName = defaultSecretsConfigMapName
 	}
-	configMap := sg.getSecretConfig(c)
+	configMap, err := sg.getSecretConfig(c)
+	if err != nil {
+		return err
+	}
 	secret, err := sg.getSecret(s, configMap)
 	if err != nil {
 		return err
@@ -132,8 +135,22 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	return clientset.CoreV1().Secrets(sg.Namespace), nil
 }
 
+// defaultConfig returns the configmap containing the secrets configuration
+func defaultConfig(name string) *v1.ConfigMap {
+	return &v1.ConfigMap{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: name,
+		},
+		Data: map[string]string{
+			configVersion:           currentConfigVersion,
+			currentSecretName:       legacySecretName,
+			currentSecretGeneration: "0",
+		},
+	}
+}
+
 // GetSecretConfig returns the configmap containing the secrets configuration
-func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
+func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap, error) {
 	configMap, err := c.Get(sg.SecretsConfigMapName, metav1.GetOptions{})
 	if err == nil && configMap.Data[configVersion] == "" {
 		// Assume pre-release configMap without version is compatible with initial release
@@ -141,17 +158,25 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) *v1.ConfigMap {
 		// needs to be updated and not created
 		configMap.Data[configVersion] = currentConfigVersion
 	}
-	if err != nil {
-		configMap = &v1.ConfigMap{
-			ObjectMeta: metav1.ObjectMeta{
-				Name: sg.SecretsConfigMapName,
-			},
-			Data: map[string]string{},
-		}
-		configMap.Data[currentSecretName] = legacySecretName
-		configMap.Data[currentSecretGeneration] = "0"
+	// So far there is only the initial config version
+	if err == nil && configMap.Data[configVersion] != currentConfigVersion {
+		return nil, fmt.Errorf("Config map `%s` has unsupported config version `%s`", configMap.Name, configMap.Data[configVersion])
 	}
-	return configMap
+	if err == nil {
+		// make sure we can later update the config map
+		_, err = c.Update(configMap)
+		if err != nil {
+			log.Printf("Could get, but not update config map `%s`\n", configMap.Name)
+		}
+	} else {
+		configMap = defaultConfig(sg.SecretsConfigMapName)
+		_, err = c.Create(configMap)
+		if err == nil {
+			log.Printf("Created configmap `%s`\n", configMap.Name)
+		}
+
+	}
+	return configMap, err
 }
 
 // GetSecret returns a new Secret object initialized with the data
@@ -319,22 +344,11 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	log.Printf("Created secret `%s`\n", secrets.Name)
 
 	// update configmap
-	if configMap.Data[configVersion] == "" {
-		configMap.Data[configVersion] = currentConfigVersion
-		_, err = c.Create(configMap)
-		if err != nil {
-			delete(configMap.Data, configVersion)
-			return fmt.Errorf("Error creating configmap %s: %s", configMap.Name, err)
-		}
-		log.Printf("Created configmap `%s`\n", configMap.Name)
-	} else {
-		log.Printf("previous secret `%s`\n", configMap.Data[previousSecretName])
-		_, err = c.Update(configMap)
-		if err != nil {
-			return fmt.Errorf("Error updating configmap %s: %s", configMap.Name, err)
-		}
-		log.Printf("Updated configmap `%s`\n", configMap.Name)
+	_, err = c.Update(configMap)
+	if err != nil {
+		return fmt.Errorf("Error updating configmap %s: %s", configMap.Name, err)
 	}
+	log.Printf("Updated configmap `%s`\n", configMap.Name)
 
 	if obsoleteSecretName != "" {
 		err = s.Delete(obsoleteSecretName, &metav1.DeleteOptions{})
