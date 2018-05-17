@@ -117,7 +117,7 @@ func kubeClientset() (*kubernetes.Clientset, error) {
 	return clientset, err
 }
 
-// GetConfigMapInterface returns a configmap interface for the namespace
+// getConfigMapInterface returns a configmap interface for the namespace
 func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
@@ -126,7 +126,7 @@ func (sg *SecretGenerator) getConfigMapInterface() (configMapInterface, error) {
 	return clientset.CoreV1().ConfigMaps(sg.Namespace), nil
 }
 
-// GetSecretInterface returns a secrets interface for the namespace
+// getSecretInterface returns a secrets interface for the namespace
 func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {
@@ -149,7 +149,7 @@ func defaultConfig(name string) *v1.ConfigMap {
 	}
 }
 
-// GetSecretConfig returns the configmap containing the secrets configuration
+// getSecretConfig returns the configmap containing the secrets configuration
 func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap, error) {
 	configMap, err := c.Get(sg.SecretsConfigMapName, metav1.GetOptions{})
 	if err == nil && configMap.Data[configVersion] == "" {
@@ -179,8 +179,7 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 	return configMap, err
 }
 
-// GetSecret returns a new Secret object initialized with the data
-// of the currently active secrets
+// getSecret returns a new Secret object initialized with the data of the currently active secrets
 func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
 	currentName := configMap.Data[currentSecretName]
 
@@ -234,7 +233,7 @@ func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
 	return nil
 }
 
-// GenerateSecret will generate all secrets defined in the manifest that don't already exist
+// generateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
 func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
@@ -328,7 +327,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	return nil
 }
 
-// UpdateSecret creates the new Secret object and records the new name in the configmap.
+// updateSecret creates the new Secret object and records the new name in the configmap.
 // The current secrets become the previous secrets, and any previous previous secrets will
 // be deleted. The configmap object in Kube is then updated to match the new configuration.
 func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) error {
