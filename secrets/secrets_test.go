@@ -763,6 +763,26 @@ func TestGenerateSecret(t *testing.T) {
 							ValueType: model.ValueTypePrivateKey,
 						},
 					},
+					{
+						Name:      "immutable-cert",
+						Secret:    true,
+						Immutable: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "immutable",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypeCertificate,
+						},
+					},
+					{
+						Name:      "immutable-key",
+						Secret:    true,
+						Immutable: true,
+						Generator: &model.ConfigurationVariableGenerator{
+							ID:        "immutable",
+							Type:      model.GeneratorTypeCertificate,
+							ValueType: model.ValueTypePrivateKey,
+						},
+					},
 				},
 			},
 		}
@@ -772,8 +792,11 @@ func TestGenerateSecret(t *testing.T) {
 
 		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[3], "key")
+		setSecret(secrets, manifest.Configuration.Variables[4], "cert2")
+		setSecret(secrets, manifest.Configuration.Variables[5], "key2")
 
 		manifest.Configuration.Variables[2].Generator.SubjectNames = []string{"*.domain"}
+		manifest.Configuration.Variables[4].Generator.SubjectNames = []string{"*.domain"}
 
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
@@ -793,6 +816,9 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.NotEqual(t, []byte("cert"), secrets.Data["ssl-cert"])
 		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-key"])
+
+		assert.Equal(t, []byte("cert2"), secrets.Data["immutable-cert"])
+		assert.Equal(t, []byte("key2"), secrets.Data["immutable-key"])
 	})
 }
 
