@@ -246,15 +246,19 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		// the same order as they are defined in the source code.
 		generatorInput, err := json.Marshal(configVar.Generator)
 		if err != nil {
-			return fmt.Errorf("Can't convert %s generator config into JSON: %s", configVar.Name, err)
+			return fmt.Errorf("Can't convert `%s` generator config into JSON: %s", configVar.Name, err)
 		}
 
 		// if generator input has changed, then the secret needs to be regenerated
 		name := util.ConvertNameToKey(configVar.Name)
 		if !bytes.Equal(secrets.Data[name+generatorInputSuffix], generatorInput) {
-			log.Printf("Variable %s must be regenerated because the Generator options have changed\n", configVar.Name)
-			delete(secrets.Data, name)
-			secrets.Data[name+generatorInputSuffix] = generatorInput
+			if configVar.Immutable {
+				log.Printf("Warning: Generator options for `%s` have changed, but variable is immutable\n", configVar.Name)
+			} else {
+				log.Printf("Variable `%s` must be regenerated because the generator options have changed\n", configVar.Name)
+				delete(secrets.Data, name)
+				secrets.Data[name+generatorInputSuffix] = generatorInput
+			}
 		}
 
 		switch configVar.Generator.Type {
