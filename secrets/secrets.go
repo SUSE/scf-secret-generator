@@ -27,10 +27,10 @@ const defaultSecretsConfigMapName = "secrets-config"
 // The unversioned name of the secret used by legacy versions of the secrets generator
 const legacySecretName = "secret"
 
-const currentSecretName = "current-secrets-name"
-const currentSecretGeneration = "current-secrets-generation"
-const previousSecretName = "previous-secrets-name"
-const configVersion = "config-version"
+const currentSecretNameKey = "current-secrets-name"
+const currentSecretGenerationKey = "current-secrets-generation"
+const previousSecretNameKey = "previous-secrets-name"
+const configVersionKey = "config-version"
 
 const currentConfigVersion = "1"
 
@@ -142,9 +142,9 @@ func defaultConfig(name string) *v1.ConfigMap {
 			Name: name,
 		},
 		Data: map[string]string{
-			configVersion:           currentConfigVersion,
-			currentSecretName:       legacySecretName,
-			currentSecretGeneration: "0",
+			configVersionKey:           currentConfigVersion,
+			currentSecretNameKey:       legacySecretName,
+			currentSecretGenerationKey: "0",
 		},
 	}
 }
@@ -152,15 +152,15 @@ func defaultConfig(name string) *v1.ConfigMap {
 // getSecretConfig returns the configmap containing the secrets configuration
 func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap, error) {
 	configMap, err := c.Get(sg.SecretsConfigMapName, metav1.GetOptions{})
-	if err == nil && configMap.Data[configVersion] == "" {
+	if err == nil && configMap.Data[configVersionKey] == "" {
 		// Assume pre-release configMap without version is compatible with initial release
 		// Setting configVersion here also tells updateSecret() that the configMap
 		// needs to be updated and not created
-		configMap.Data[configVersion] = currentConfigVersion
+		configMap.Data[configVersionKey] = currentConfigVersion
 	}
 	// So far there is only the initial config version
-	if err == nil && configMap.Data[configVersion] != currentConfigVersion {
-		return nil, fmt.Errorf("Config map `%s` has unsupported config version `%s`", configMap.Name, configMap.Data[configVersion])
+	if err == nil && configMap.Data[configVersionKey] != currentConfigVersion {
+		return nil, fmt.Errorf("Config map `%s` has unsupported config version `%s`", configMap.Name, configMap.Data[configVersionKey])
 	}
 	if err == nil {
 		// make sure we can later update the config map
@@ -181,7 +181,7 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 
 // getSecret returns a new Secret object initialized with the data of the currently active secrets
 func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
-	currentName := configMap.Data[currentSecretName]
+	currentName := configMap.Data[currentSecretNameKey]
 
 	if sg.SecretsName == currentName {
 		log.Printf("Secret `%s` already exists; nothing to do\n", sg.SecretsName)
@@ -237,8 +237,8 @@ func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
 func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
-	if sg.SecretsGeneration != configMap.Data[currentSecretGeneration] {
-		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGeneration], sg.SecretsGeneration)
+	if sg.SecretsGeneration != configMap.Data[currentSecretGenerationKey] {
+		log.Printf("Rotating secrets; generation '%s' -> '%s'\n", configMap.Data[currentSecretGenerationKey], sg.SecretsGeneration)
 
 		immutable := make(map[string]bool)
 		for _, configVar := range manifest.Configuration.Variables {
@@ -252,7 +252,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 				delete(secrets.Data, name+generatorInputSuffix)
 			}
 		}
-		configMap.Data[currentSecretGeneration] = sg.SecretsGeneration
+		configMap.Data[currentSecretGenerationKey] = sg.SecretsGeneration
 	}
 
 	sshKeys := make(map[string]ssh.Key)
@@ -331,9 +331,9 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 // The current secrets become the previous secrets, and any previous previous secrets will
 // be deleted. The configmap object in Kube is then updated to match the new configuration.
 func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c configMapInterface, configMap *v1.ConfigMap) error {
-	var obsoleteSecretName = configMap.Data[previousSecretName]
-	configMap.Data[previousSecretName] = configMap.Data[currentSecretName]
-	configMap.Data[currentSecretName] = secrets.Name
+	var obsoleteSecretName = configMap.Data[previousSecretNameKey]
+	configMap.Data[previousSecretNameKey] = configMap.Data[currentSecretNameKey]
+	configMap.Data[currentSecretNameKey] = secrets.Name
 
 	// create new secret
 	_, err := s.Create(secrets)

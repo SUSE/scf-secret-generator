@@ -88,15 +88,15 @@ func (m *MockConfigMapInterface) Update(configMap *v1.ConfigMap) (*v1.ConfigMap,
 func mockConfig(name string) *v1.ConfigMap {
 	configMap := defaultConfig(name)
 	if name != defaultSecretsConfigMapName {
-		configMap.Data[currentSecretName] = "my-secret-name"
-		configMap.Data[currentSecretGeneration] = "5"
+		configMap.Data[currentSecretNameKey] = "my-secret-name"
+		configMap.Data[currentSecretGenerationKey] = "5"
 		switch name {
 		case "legacy":
 			// no config version
 		case "invalid":
-			configMap.Data[configVersion] = "999"
+			configMap.Data[configVersionKey] = "999"
 		default:
-			configMap.Data[configVersion] = currentConfigVersion
+			configMap.Data[configVersionKey] = currentConfigVersion
 		}
 	}
 	return configMap
@@ -143,9 +143,9 @@ func TestGetSecretConfig(t *testing.T) {
 
 		require.NotNil(t, configMap)
 		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-		assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
-		assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
-		assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
+		assert.Equal(t, legacySecretName, configMap.Data[currentSecretNameKey])
+		assert.Equal(t, "0", configMap.Data[currentSecretGenerationKey])
+		assert.Equal(t, currentConfigVersion, configMap.Data[configVersionKey])
 	})
 
 	t.Run("ConfigMap already exists", func(t *testing.T) {
@@ -169,9 +169,9 @@ func TestGetSecretConfig(t *testing.T) {
 
 		require.NotNil(t, configMap)
 		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
-		assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
-		assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
+		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretNameKey])
+		assert.Equal(t, "5", configMap.Data[currentSecretGenerationKey])
+		assert.Equal(t, currentConfigVersion, configMap.Data[configVersionKey])
 	})
 
 	t.Run("ConfigMap exists but has no config-version", func(t *testing.T) {
@@ -195,9 +195,9 @@ func TestGetSecretConfig(t *testing.T) {
 
 		require.NotNil(t, configMap)
 		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
-		assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
-		assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
+		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretNameKey])
+		assert.Equal(t, "5", configMap.Data[currentSecretGenerationKey])
+		assert.Equal(t, currentConfigVersion, configMap.Data[configVersionKey])
 	})
 
 	t.Run("ConfigMap exists but has invalid version", func(t *testing.T) {
@@ -259,7 +259,7 @@ func TestGetSecret(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap, err := sg.getSecretConfig(&c)
 		assert.NoError(t, err)
-		configMap.Data[currentSecretName] = "missing"
+		configMap.Data[currentSecretNameKey] = "missing"
 
 		var s MockSecretInterface
 		s.On("Get", "missing", metav1.GetOptions{})
@@ -279,7 +279,7 @@ func TestGetSecret(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap, err := sg.getSecretConfig(&c)
 		assert.NoError(t, err)
-		configMap.Data[currentSecretName] = "current-secret"
+		configMap.Data[currentSecretNameKey] = "current-secret"
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
@@ -303,7 +303,7 @@ func TestGetSecret(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap, err := sg.getSecretConfig(&c)
 		assert.NoError(t, err)
-		configMap.Data[currentSecretName] = "current-secret"
+		configMap.Data[currentSecretNameKey] = "current-secret"
 
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
@@ -370,7 +370,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{"non-generated": []byte("obsolete")}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		assert.Equal(t, []byte("obsolete"), secrets.Data["non-generated"])
 		sg.generateSecret(manifest, secrets, configMap)
@@ -397,7 +397,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		assert.Empty(t, secrets.Data["dirty"])
 		assert.Empty(t, secrets.Data["dirty"+generatorInputSuffix])
@@ -426,7 +426,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
@@ -454,7 +454,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
@@ -483,7 +483,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 		sg.generateSecret(manifest, secrets, configMap)
@@ -521,7 +521,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		assert.Empty(t, secrets.Data["ssh-key"])
 		assert.Empty(t, secrets.Data["ssh-key"+generatorInputSuffix])
@@ -565,7 +565,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[0], "key")
 		setSecret(secrets, manifest.Configuration.Variables[1], "fingerprint")
@@ -607,7 +607,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		assert.Empty(t, secrets.Data["ca-cert"])
 		assert.Empty(t, secrets.Data["ca-cert"+generatorInputSuffix])
@@ -651,7 +651,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[0], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[1], "key")
@@ -709,7 +709,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		assert.Empty(t, secrets.Data["ssl-cert"])
 		assert.Empty(t, secrets.Data["ssl-cert"+generatorInputSuffix])
@@ -771,7 +771,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[3], "key")
@@ -849,7 +849,7 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
-		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGeneration: "1"}}
+		configMap := &v1.ConfigMap{Data: map[string]string{currentSecretGenerationKey: "1"}}
 
 		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[3], "key")
@@ -1000,8 +1000,8 @@ func TestUpdateSecret(t *testing.T) {
 
 		var c MockConfigMapInterface
 		configMap := &v1.ConfigMap{Data: map[string]string{
-			configVersion:     "1",
-			currentSecretName: legacySecretName,
+			configVersionKey:     "1",
+			currentSecretNameKey: legacySecretName,
 		}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
@@ -1030,9 +1030,9 @@ func TestUpdateSecret(t *testing.T) {
 
 		var c MockConfigMapInterface
 		configMap := &v1.ConfigMap{Data: map[string]string{
-			configVersion:      "1",
-			currentSecretName:  "current-secret",
-			previousSecretName: legacySecretName,
+			configVersionKey:      "1",
+			currentSecretNameKey:  "current-secret",
+			previousSecretNameKey: legacySecretName,
 		}}
 		c.On("Create", configMap)
 		c.On("Update", configMap)
