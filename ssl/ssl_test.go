@@ -10,6 +10,7 @@ import (
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/cloudflare/cfssl/csr"
 	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 )
 
@@ -146,16 +147,15 @@ func TestGenerateCerts(t *testing.T) {
 		assert.NotEmpty(t, secrets.Data[certInfo[defaultCA].CertificateName])
 
 		certBlob, _ := pem.Decode(secrets.Data[certInfo[defaultCA].CertificateName])
-		if !assert.NotNil(t, certBlob, "Failed to decode certificate PEM block") {
-			return
-		}
+		require.NotNil(t, certBlob, "Failed to decode certificate PEM block")
+
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
-		if assert.NoError(t, err) {
-			assert.True(t, cert.IsCA, "CA cert is a CA cert")
-			assert.True(t, cert.NotAfter.After(time.Now().Add(698*24*time.Hour)))
-			assert.True(t, cert.NotAfter.Before(time.Now().Add(702*24*time.Hour)))
-			assert.Empty(t, cert.DNSNames, "CA cert should not include any DNS names")
-		}
+		require.NoError(t, err)
+
+		assert.True(t, cert.IsCA, "CA cert is a CA cert")
+		assert.True(t, cert.NotAfter.After(time.Now().Add(698*24*time.Hour)))
+		assert.True(t, cert.NotAfter.Before(time.Now().Add(702*24*time.Hour)))
+		assert.Empty(t, cert.DNSNames, "CA cert should not include any DNS names")
 	})
 
 	t.Run("Check createCert is called properly", func(t *testing.T) {
@@ -191,16 +191,15 @@ func TestGenerateCerts(t *testing.T) {
 		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
 
 		certBlob, _ := pem.Decode(secrets.Data[certInfo[certID].CertificateName])
-		if !assert.NotNil(t, certBlob, "Failed to decode certificate PEM block") {
-			return
-		}
+		require.NotNil(t, certBlob, "Failed to decode certificate PEM block")
+
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
-		if assert.NoError(t, err) {
-			assert.False(t, cert.IsCA, "cert is NOT a CA cert")
-			assert.True(t, cert.NotAfter.After(time.Now().Add(28*24*time.Hour)))
-			assert.True(t, cert.NotAfter.Before(time.Now().Add(32*24*time.Hour)))
-			assert.NotEmpty(t, cert.DNSNames, "Normal cert should include some DNS names")
-		}
+		require.NoError(t, err)
+
+		assert.False(t, cert.IsCA, "cert is NOT a CA cert")
+		assert.True(t, cert.NotAfter.After(time.Now().Add(28*24*time.Hour)))
+		assert.True(t, cert.NotAfter.Before(time.Now().Add(32*24*time.Hour)))
+		assert.NotEmpty(t, cert.DNSNames, "Normal cert should include some DNS names")
 	})
 
 }
@@ -315,10 +314,9 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
+		require.Error(t, err)
 
-		if assert.Error(t, err) {
-			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
-		}
+		assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
 	})
 
 	t.Run("If the default CA certificate isn't found, return an error", func(t *testing.T) {
@@ -331,9 +329,9 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
-		if assert.Error(t, err) {
-			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
-		}
+		require.Error(t, err)
+
+		assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
 	})
 
 	t.Run("If CA cert fails to parse, it should return an error", func(t *testing.T) {
@@ -353,10 +351,9 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
+		require.Error(t, err)
 
-		if assert.Error(t, err) {
-			assert.Contains(t, err.Error(), "Cannot parse CA cert")
-		}
+		assert.Contains(t, err.Error(), "Cannot parse CA cert")
 	})
 
 	t.Run("If CA private key fails to parse, it should return an error", func(t *testing.T) {
@@ -376,10 +373,9 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
+		require.Error(t, err)
 
-		if assert.Error(t, err) {
-			assert.Contains(t, err.Error(), "Cannot parse CA private key")
-		}
+		assert.Contains(t, err.Error(), "Cannot parse CA private key")
 	})
 
 	t.Run("secrets.Data should have a private key and a certificate", func(t *testing.T) {
@@ -395,14 +391,12 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
+		require.NoError(t, err)
 
-		if assert.NoError(t, err) {
-			assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
-			assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
-			_, err := tls.X509KeyPair(secrets.Data[certInfo[certID].CertificateName],
-				secrets.Data[certInfo[certID].PrivateKeyName])
-			assert.NoError(t, err)
-		}
+		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
+		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
+		_, err = tls.X509KeyPair(secrets.Data[certInfo[certID].CertificateName], secrets.Data[certInfo[certID].PrivateKeyName])
+		assert.NoError(t, err)
 	})
 
 	t.Run("rolename isn't empty and the env is valid", func(t *testing.T) {
@@ -423,27 +417,24 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
+		require.NoError(t, err)
 
-		if !assert.NoError(t, err) {
-			return
-		}
 		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
 		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
 
 		certBlob, _ := pem.Decode(secrets.Data[certInfo[certID].CertificateName])
-		if !assert.NotNil(t, certBlob, "Failed to decode certificate PEM block") {
-			return
-		}
+		require.NotNil(t, certBlob, "Failed to decode certificate PEM block")
+
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
-		if assert.NoError(t, err) {
-			assert.Contains(t, cert.DNSNames, "dummy-role.namespace.svc.cluster.local")
-			assert.Contains(t, cert.DNSNames, "*.dummy-role-set.namespace.svc.cluster.local")
-			assert.Contains(t, cert.DNSNames, "dummy-role.suffix")
-			assert.Contains(t, cert.DNSNames, "*.domain")
-			assert.Contains(t, cert.DNSNames, "foo.namespace")
-			assert.Contains(t, cert.DNSNames, "svc.suffix")
-			assert.NotContains(t, cert.DNSNames, "dummy-role-set")
-			assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
-		}
+		require.NoError(t, err)
+
+		assert.Contains(t, cert.DNSNames, "dummy-role.namespace.svc.cluster.local")
+		assert.Contains(t, cert.DNSNames, "*.dummy-role-set.namespace.svc.cluster.local")
+		assert.Contains(t, cert.DNSNames, "dummy-role.suffix")
+		assert.Contains(t, cert.DNSNames, "*.domain")
+		assert.Contains(t, cert.DNSNames, "foo.namespace")
+		assert.Contains(t, cert.DNSNames, "svc.suffix")
+		assert.NotContains(t, cert.DNSNames, "dummy-role-set")
+		assert.NotContains(t, cert.DNSNames, "*.*.dummy-role-set")
 	})
 }

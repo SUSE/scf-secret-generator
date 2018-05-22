@@ -10,6 +10,7 @@ import (
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/mock"
+	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
@@ -127,12 +128,11 @@ func TestGetSecretConfig(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 
-		if assert.NotNil(t, configMap) {
-			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-			assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
-			assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
-			assert.Empty(t, configMap.Data[configVersion])
-		}
+		require.NotNil(t, configMap)
+		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+		assert.Equal(t, legacySecretName, configMap.Data[currentSecretName])
+		assert.Equal(t, "0", configMap.Data[currentSecretGeneration])
+		assert.Empty(t, configMap.Data[configVersion])
 	})
 
 	t.Run("ConfigMap already exists", func(t *testing.T) {
@@ -145,12 +145,11 @@ func TestGetSecretConfig(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 
-		if assert.NotNil(t, configMap) {
-			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-			assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
-			assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
-			assert.Equal(t, "2", configMap.Data[configVersion])
-		}
+		require.NotNil(t, configMap)
+		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
+		assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
+		assert.Equal(t, "2", configMap.Data[configVersion])
 	})
 
 	t.Run("ConfigMap exists but has no config-version", func(t *testing.T) {
@@ -163,12 +162,11 @@ func TestGetSecretConfig(t *testing.T) {
 		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
 		configMap := sg.getSecretConfig(&c)
 
-		if assert.NotNil(t, configMap) {
-			assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
-			assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
-			assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
-			assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
-		}
+		require.NotNil(t, configMap)
+		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
+		assert.Equal(t, "my-secret-name", configMap.Data[currentSecretName])
+		assert.Equal(t, "5", configMap.Data[currentSecretGeneration])
+		assert.Equal(t, currentConfigVersion, configMap.Data[configVersion])
 	})
 }
 
@@ -188,11 +186,10 @@ func TestGetSecret(t *testing.T) {
 		s.On("Get", legacySecretName, metav1.GetOptions{})
 
 		secrets, err := sg.getSecret(&s, configMap)
-
-		if assert.NotNil(t, secrets) {
-			assert.Equal(t, "new-secret", secrets.Name)
-		}
 		assert.NoError(t, err)
+
+		require.NotNil(t, secrets)
+		assert.Equal(t, "new-secret", secrets.Name)
 	})
 
 	t.Run("ConfigMap names a secret that doesn't exist", func(t *testing.T) {
@@ -226,12 +223,11 @@ func TestGetSecret(t *testing.T) {
 		var s MockSecretInterface
 		s.On("Get", "current-secret", metav1.GetOptions{})
 		secrets, err := sg.getSecret(&s, configMap)
-
-		if assert.NotNil(t, secrets) {
-			assert.Equal(t, "new-secret", secrets.Name)
-			assert.Equal(t, []byte("data"), secrets.Data["dummy"])
-		}
 		assert.NoError(t, err)
+
+		require.NotNil(t, secrets)
+		assert.Equal(t, "new-secret", secrets.Name)
+		assert.Equal(t, []byte("data"), secrets.Data["dummy"])
 	})
 
 	t.Run("ConfigMap current secret is the same as KUBE_SECRETS_GENERATION_NAME", func(t *testing.T) {
