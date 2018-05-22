@@ -39,6 +39,12 @@ var secretsGeneration = flag.String(
 	"Secrets Generation",
 )
 
+var certExpiration = flag.Int(
+	"certExpiration",
+	10950, // 30 years * 365 days
+	"Certificate expiration (in days)",
+)
+
 func main() {
 	flag.Parse()
 
@@ -54,6 +60,7 @@ func main() {
 		ServiceDomainSuffix: *serviceDomainSuffix,
 		SecretsName:         *secretsName,
 		SecretsGeneration:   *secretsGeneration,
+		CertExpiration:      *certExpiration,
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")

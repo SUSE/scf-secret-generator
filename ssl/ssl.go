@@ -58,14 +58,14 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.Configuration
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, secrets *v1.Secret) error {
+func GenerateCerts(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, expiration int, secrets *v1.Secret) error {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if !info.IsAuthority {
 			continue
 		}
 		glog.Printf("- SSL CA: %s\n", id)
-		err := createCA(certInfo, secrets, id)
+		err := createCA(certInfo, secrets, id, expiration)
 		if err != nil {
 			return err
 		}
@@ -78,7 +78,7 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, serviceDomainSuffix 
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		err := createCert(certInfo, namespace, serviceDomainSuffix, secrets, id)
+		err := createCert(certInfo, namespace, serviceDomainSuffix, secrets, id, expiration)
 		if err != nil {
 			return err
 		}
@@ -90,7 +90,7 @@ func rsaKeyRequest() *csr.BasicKeyRequest {
 	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
 }
 
-func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string) error {
+func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string, expiration int) error {
 	var err error
 	info := certInfo[id]
 
@@ -103,7 +103,7 @@ func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string) error
 	}
 
 	req := &csr.CertificateRequest{
-		CA:         &csr.CAConfig{Expiry: "262800h"}, // 30 years
+		CA:         &csr.CAConfig{Expiry: fmt.Sprintf("%dh", expiration*24)},
 		CN:         "SCF CA",
 		KeyRequest: rsaKeyRequest(),
 	}
@@ -126,7 +126,7 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, secrets *v1.Secret, id string) error {
+func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, secrets *v1.Secret, id string, expiration int) error {
 	var err error
 	info := certInfo[id]
 
@@ -187,8 +187,8 @@ func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix str
 
 	signingProfile := &config.SigningProfile{
 		Usage:        []string{"server auth", "client auth"},
-		Expiry:       262800 * time.Hour, // 30 years
-		ExpiryString: "262800h",          // 30 years
+		Expiry:       time.Duration(expiration*24) * time.Hour,
+		ExpiryString: fmt.Sprintf("%dh", expiration*24),
 	}
 	policy := &config.Signing{
 		Profiles: map[string]*config.SigningProfile{},

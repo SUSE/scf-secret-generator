@@ -5,6 +5,7 @@ import (
 	"crypto/x509"
 	"encoding/pem"
 	"testing"
+	"time"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/cloudflare/cfssl/csr"
@@ -138,7 +139,7 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err := GenerateCerts(certInfo, "namespace", "suffix", 700, secrets)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data[certInfo[defaultCA].PrivateKeyName])
@@ -150,6 +151,9 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
 		if assert.NoError(t, err) {
+			assert.True(t, cert.IsCA, "CA cert is a CA cert")
+			assert.True(t, cert.NotAfter.After(time.Now().Add(698*24*time.Hour)))
+			assert.True(t, cert.NotAfter.Before(time.Now().Add(702*24*time.Hour)))
 			assert.Empty(t, cert.DNSNames, "CA cert should not include any DNS names")
 		}
 	})
@@ -165,7 +169,7 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err := GenerateCerts(certInfo, "namespace", "suffix", 365, secrets)
 
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
@@ -180,7 +184,7 @@ func TestGenerateCerts(t *testing.T) {
 			SubjectNames:    []string{"subject-names"},
 			RoleName:        "dummy-role",
 		}
-		err = GenerateCerts(certInfo, "namespace", "suffix", secrets)
+		err = GenerateCerts(certInfo, "namespace", "suffix", 30, secrets)
 
 		assert.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
@@ -192,6 +196,9 @@ func TestGenerateCerts(t *testing.T) {
 		}
 		cert, err := x509.ParseCertificate(certBlob.Bytes)
 		if assert.NoError(t, err) {
+			assert.False(t, cert.IsCA, "cert is NOT a CA cert")
+			assert.True(t, cert.NotAfter.After(time.Now().Add(28*24*time.Hour)))
+			assert.True(t, cert.NotAfter.Before(time.Now().Add(32*24*time.Hour)))
 			assert.NotEmpty(t, cert.DNSNames, "Normal cert should include some DNS names")
 		}
 	})
@@ -221,7 +228,7 @@ func TestCreateCA(t *testing.T) {
 		secrets.Data["private-key"] = []byte("private-key-data")
 		secrets.Data["certificate-name"] = []byte("certificate-data")
 
-		createCA(certInfo, secrets, certID)
+		createCA(certInfo, secrets, certID, 365)
 
 		assert.Equal(t, []byte("private-key-data"), certInfo[certID].PrivateKey)
 		assert.Equal(t, []byte("certificate-data"), certInfo[certID].Certificate)
@@ -237,7 +244,7 @@ func TestCreateCA(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		createCA(certInfo, secrets, certID)
+		createCA(certInfo, secrets, certID, 365)
 
 		assert.NotEqual(t, secrets.Data[certInfo[certID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[certID].CertificateName], []byte{})
@@ -275,7 +282,7 @@ func TestCreateCert(t *testing.T) {
 	// Initialize a default CA for later use
 	defaultCertInfo := make(map[string]CertInfo)
 	secrets := &v1.Secret{Data: map[string][]byte{}}
-	createCA(defaultCertInfo, secrets, defaultCA)
+	createCA(defaultCertInfo, secrets, defaultCA, 365)
 
 	t.Run("If secrets already has a private key, do nothing", func(t *testing.T) {
 		t.Parallel()
@@ -291,7 +298,7 @@ func TestCreateCert(t *testing.T) {
 		secrets.Data["private-key"] = []byte("private-key-data")
 		secrets.Data["certificate-name"] = []byte("certificate-data")
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		assert.NoError(t, err)
 		assert.Equal(t, []byte("private-key-data"), secrets.Data["private-key"])
@@ -307,7 +314,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
@@ -323,7 +330,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 		if assert.Error(t, err) {
 			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
 		}
@@ -345,7 +352,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "Cannot parse CA cert")
@@ -368,7 +375,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		if assert.Error(t, err) {
 			assert.Contains(t, err.Error(), "Cannot parse CA private key")
@@ -387,7 +394,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		if assert.NoError(t, err) {
 			assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
@@ -415,7 +422,7 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "suffix", secrets, certID)
+		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
 
 		if !assert.NoError(t, err) {
 			return

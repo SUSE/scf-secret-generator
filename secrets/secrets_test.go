@@ -111,6 +111,7 @@ func testingSecretGenerator() SecretGenerator {
 		SecretsName:          "new-secret",
 		SecretsGeneration:    "1",
 		SecretsConfigMapName: defaultSecretsConfigMapName,
+		CertExpiration:       365,
 	}
 }
 
