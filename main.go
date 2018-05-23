@@ -30,18 +30,18 @@ var serviceDomainSuffix = flag.String(
 var secretsName = flag.String(
 	"secretsName",
 	"",
-	"Secrets Name",
+	"Secrets Name (version string of the helm chart)",
 )
 
 var secretsGeneration = flag.String(
 	"secretsGeneration",
 	"",
-	"Secrets Generation",
+	"Secrets Generation (rotation counter)",
 )
 
 var certExpiration = flag.Int(
 	"certExpiration",
-	10950, // 30 years * 365 days
+	30*365+7, // just over 30 years
 	"Certificate expiration (in days)",
 )
 
@@ -49,7 +49,7 @@ func main() {
 	flag.Parse()
 
 	if flag.NArg() != 1 {
-		fmt.Printf("Usage: %s <role-manifest>\n", os.Args[0])
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS] ROLE-MANIFEST\n", os.Args[0])
 		flag.PrintDefaults()
 		os.Exit(1)
 	}

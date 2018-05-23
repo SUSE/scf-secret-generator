@@ -171,9 +171,7 @@ func TestGenerateCerts(t *testing.T) {
 
 		err := GenerateCerts(certInfo, "namespace", "suffix", 365, secrets)
 
-		if assert.Error(t, err) {
-			assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
-		}
+		assert.EqualError(t, err, "CA "+defaultCA+" not found")
 		assert.Empty(t, secrets.Data[certInfo[certID].PrivateKeyName])
 		assert.Empty(t, secrets.Data[certInfo[certID].CertificateName])
 
@@ -314,9 +312,8 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
-		require.Error(t, err)
 
-		assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
+		assert.EqualError(t, err, "CA "+defaultCA+" not found")
 	})
 
 	t.Run("If the default CA certificate isn't found, return an error", func(t *testing.T) {
@@ -329,9 +326,8 @@ func TestCreateCert(t *testing.T) {
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
 		err := createCert(certInfo, "namespace", "suffix", secrets, certID, 365)
-		require.Error(t, err)
 
-		assert.Equal(t, "CA "+defaultCA+" not found", err.Error())
+		assert.EqualError(t, err, "CA "+defaultCA+" not found")
 	})
 
 	t.Run("If CA cert fails to parse, it should return an error", func(t *testing.T) {

@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/assert"
-	"github.com/stretchr/testify/require"
 )
 
 func TestManifestFileIsInvalid(t *testing.T) {
@@ -13,8 +12,7 @@ func TestManifestFileIsInvalid(t *testing.T) {
 
 	_, err := GetManifest(strings.NewReader("123123 123123"))
 
-	require.Error(t, err)
-	assert.Equal(t, "yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `123123 ...` into model.Manifest", err.Error())
+	assert.EqualError(t, err, "yaml: unmarshal errors:\n  line 1: cannot unmarshal !!str `123123 ...` into model.Manifest")
 }
 
 func TestManifestConfigurationSectionNotFound(t *testing.T) {
@@ -22,6 +20,5 @@ func TestManifestConfigurationSectionNotFound(t *testing.T) {
 
 	_, err := GetManifest(strings.NewReader("roles: []"))
 
-	require.Error(t, err)
-	assert.Equal(t, "'configuration section' not found in manifest", err.Error())
+	assert.EqualError(t, err, "'configuration section' not found in manifest")
 }
