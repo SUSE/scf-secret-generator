@@ -45,6 +45,7 @@ type SecretGenerator struct {
 	SecretsName          string
 	SecretsGeneration    string
 	SecretsConfigMapName string
+	CertExpiration       int
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -284,7 +285,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, secrets)
+	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, sg.CertExpiration, secrets)
 
 	// remove all secrets no longer referenced in the manifest
 	generatedSecret := make(map[string]bool)

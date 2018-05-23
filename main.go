@@ -1,6 +1,7 @@
 package main
 
 import (
+	"flag"
 	"fmt"
 	"log"
 	"os"
@@ -8,41 +9,76 @@ import (
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
-func printHelp() {
-	fmt.Printf("Usage: %s <role-manifest>\n", os.Args[0])
-}
+var domain = flag.String(
+	"domain",
+	"",
+	"Domain",
+)
+
+var namespace = flag.String(
+	"namespace",
+	"",
+	"Kubernetes namespace",
+)
+
+var serviceDomainSuffix = flag.String(
+	"serviceDomainSuffix",
+	"",
+	"Service Domain Suffix",
+)
+
+var secretsName = flag.String(
+	"secretsName",
+	"",
+	"Secrets Name (version string of the helm chart)",
+)
+
+var secretsGeneration = flag.String(
+	"secretsGeneration",
+	"",
+	"Secrets Generation (rotation counter)",
+)
+
+var certExpiration = flag.Int(
+	"certExpiration",
+	30*365+7, // just over 30 years
+	"Certificate expiration (in days)",
+)
 
 func main() {
-	if len(os.Args) != 2 {
-		printHelp()
+	flag.Parse()
+
+	if flag.NArg() != 1 {
+		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS] ROLE-MANIFEST\n", os.Args[0])
+		flag.PrintDefaults()
 		os.Exit(1)
 	}
 
 	sg := secrets.SecretGenerator{
-		Domain:              os.Getenv("DOMAIN"),
-		Namespace:           os.Getenv("KUBERNETES_NAMESPACE"),
-		ServiceDomainSuffix: os.Getenv("KUBE_SERVICE_DOMAIN_SUFFIX"),
-		SecretsName:         os.Getenv("KUBE_SECRETS_GENERATION_NAME"),
-		SecretsGeneration:   os.Getenv("KUBE_SECRETS_GENERATION_COUNTER"),
+		Domain:              *domain,
+		Namespace:           *namespace,
+		ServiceDomainSuffix: *serviceDomainSuffix,
+		SecretsName:         *secretsName,
+		SecretsGeneration:   *secretsGeneration,
+		CertExpiration:      *certExpiration,
 	}
-	// XXX All these settings should be passed from the commandline and not the environment
 	if sg.Domain == "" {
-		log.Fatal("DOMAIN is not set")
+		log.Fatal("-domain is not set")
 	}
 	if sg.Namespace == "" {
-		log.Fatal("KUBERNETES_NAMESPACE is not set")
+		log.Fatal("-namespace is not set")
 	}
 	if sg.ServiceDomainSuffix == "" {
-		log.Fatal("KUBE_SERVICE_DOMAIN_SUFFIX is not set")
+		log.Fatal("-serviceDomainSuffix is not set")
 	}
 	if sg.SecretsName == "" {
-		log.Fatal("KUBE_SECRETS_GENERATION_NAME is not set")
+		log.Fatal("-secretsName is not set")
 	}
 	if sg.SecretsGeneration == "" {
-		log.Fatal("KUBE_SECRETS_GENERATION_COUNTER is not set")
+		log.Fatal("-secretsGeneration is not set")
 	}
 
-	file, err := os.Open(os.Args[1])
+	file, err := os.Open(flag.Arg(0))
 	if err == nil {
 		err = sg.Generate(file)
 	}
