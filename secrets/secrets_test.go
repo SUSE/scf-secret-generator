@@ -891,11 +891,13 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
+		secrets.Data["previous-name"+generatorSuffix] = []byte("generator1")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
 			"If `name` has a previous name, then it should copy the previous value")
+		assert.Equal(t, "generator1", string(secrets.Data["new-name"+generatorSuffix]))
 	})
 
 	t.Run("NewValueAlreadyExists", func(t *testing.T) {
@@ -903,12 +905,14 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
+		secrets.Data["previous-name"+generatorSuffix] = []byte("generator1")
 		secrets.Data["new-name"] = []byte("value2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]),
 			"If `name` has a value, then it should not be changed")
+		assert.Empty(t, secrets.Data["new-name"+generatorSuffix])
 	})
 
 	t.Run("MultiplePreviousNames", func(t *testing.T) {
@@ -916,12 +920,15 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-name"] = []byte("value1")
+		secrets.Data["previous-name"+generatorSuffix] = []byte("generator1")
 		secrets.Data["previous-previous-name"] = []byte("value2")
+		secrets.Data["previous-previous-name"+generatorSuffix] = []byte("generator2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
 			"If `name` has multiple previous names, then it should copy the first previous value")
+		assert.Equal(t, "generator1", string(secrets.Data["new-name"+generatorSuffix]))
 	})
 
 	t.Run("MultiplePreviousNamesMissingSomeValues", func(t *testing.T) {
@@ -929,11 +936,13 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 		secrets.Data["previous-previous-name"] = []byte("value2")
+		secrets.Data["previous-previous-name"+generatorSuffix] = []byte("generator2")
 
 		configVar := &model.ConfigurationVariable{Name: "NEW_NAME", PreviousNames: []string{"PREVIOUS_NAME", "PREVIOUS_PREVIOUS_NAME"}}
 		migrateRenamedVariable(secrets, configVar)
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]),
 			"If `name` has multiple previous names, then it should copy the first non-empty previous value")
+		assert.Equal(t, "generator2", string(secrets.Data["new-name"+generatorSuffix]))
 	})
 }
 
