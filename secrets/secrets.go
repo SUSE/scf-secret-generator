@@ -66,29 +66,31 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if err != nil {
 		return err
 	}
+	if sg.SecretsName == configMap.Data[currentSecretNameKey] {
+		log.Printf("Secrets `%s` already exists; nothing to do\n", sg.SecretsName)
+		return nil
+	}
+	if sg.SecretsName == configMap.Data[previousSecretNameKey] {
+		return sg.rollbackSecret(c, configMap)
+	}
+
 	secret, err := sg.getSecret(s, configMap)
 	if err != nil {
 		return err
 	}
-	if secret != nil {
-		manifest, err := model.GetManifest(manifestReader)
-		if err != nil {
-			return err
-		}
-		err = sg.expandTemplates(manifest)
-		if err != nil {
-			return err
-		}
-		err = sg.generateSecret(manifest, secret, configMap)
-		if err != nil {
-			return err
-		}
-		err = sg.updateSecret(s, secret, c, configMap)
-		if err != nil {
-			return err
-		}
+	manifest, err := model.GetManifest(manifestReader)
+	if err != nil {
+		return err
 	}
-	return nil
+	err = sg.expandTemplates(manifest)
+	if err != nil {
+		return err
+	}
+	err = sg.generateSecret(manifest, secret, configMap)
+	if err != nil {
+		return err
+	}
+	return sg.updateSecret(s, secret, c, configMap)
 }
 
 // configMapInterface is a subset of v1.ConfigMapInterface
@@ -181,20 +183,13 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 
 // getSecret returns a new Secret object initialized with the data of the currently active secrets
 func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap) (*v1.Secret, error) {
-	currentName := configMap.Data[currentSecretNameKey]
-
-	if sg.SecretsName == currentName {
-		log.Printf("Secret `%s` already exists; nothing to do\n", sg.SecretsName)
-		return nil, nil
-	}
-
 	newSecret := &v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
 			Name: sg.SecretsName,
 		},
 		Data: map[string][]byte{},
 	}
-
+	currentName := configMap.Data[currentSecretNameKey]
 	currentSecret, err := s.Get(currentName, metav1.GetOptions{})
 	if err == nil {
 		newSecret.Data = currentSecret.Data
@@ -203,7 +198,6 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 			return nil, fmt.Errorf("Cannot get previous version of secrets using name '%s'", currentName)
 		}
 	}
-
 	return newSecret, nil
 }
 
@@ -327,6 +321,18 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	return nil
 }
 
+func (sg *SecretGenerator) rollbackSecret(c configMapInterface, configMap *v1.ConfigMap) error {
+	log.Printf("Rollback secrets from `%s` to `%s`\n", configMap.Data[currentSecretNameKey], sg.SecretsName)
+	configMap.Data[previousSecretNameKey] = configMap.Data[currentSecretNameKey]
+	configMap.Data[currentSecretNameKey] = sg.SecretsName
+	_, err := c.Update(configMap)
+	if err != nil {
+		return fmt.Errorf("Error updating configmap `%s`: %s", configMap.Name, err)
+	}
+	log.Printf("Updated configmap `%s`\n", configMap.Name)
+	return nil
+}
+
 // updateSecret creates the new Secret object and records the new name in the configmap.
 // The current secrets become the previous secrets, and any previous previous secrets will
 // be deleted. The configmap object in Kube is then updated to match the new configuration.
@@ -338,21 +344,20 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	// create new secret
 	_, err := s.Create(secrets)
 	if err != nil {
-		return fmt.Errorf("Error creating secret %s: %s", secrets.Name, err)
+		return fmt.Errorf("Error creating secrets `%s`: %s", secrets.Name, err)
 	}
-	log.Printf("Created secret `%s`\n", secrets.Name)
+	log.Printf("Created secrets `%s`\n", secrets.Name)
 
-	// update configmap
 	_, err = c.Update(configMap)
 	if err != nil {
-		return fmt.Errorf("Error updating configmap %s: %s", configMap.Name, err)
+		return fmt.Errorf("Error updating configmap `%s`: %s", configMap.Name, err)
 	}
 	log.Printf("Updated configmap `%s`\n", configMap.Name)
 
 	if obsoleteSecretName != "" {
 		err = s.Delete(obsoleteSecretName, &metav1.DeleteOptions{})
 		if err != nil {
-			log.Printf(fmt.Sprintf("Error deleting secret %s: %s", obsoleteSecretName, err))
+			log.Printf(fmt.Sprintf("Error deleting secrets `%s`: %s", obsoleteSecretName, err))
 		}
 	}
 	return nil

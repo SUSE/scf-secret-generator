@@ -290,29 +290,6 @@ func TestGetSecret(t *testing.T) {
 		assert.Equal(t, "new-secret", secrets.Name)
 		assert.Equal(t, []byte("data"), secrets.Data["dummy"])
 	})
-
-	t.Run("ConfigMap current secret is the same as KUBE_SECRETS_GENERATION_NAME", func(t *testing.T) {
-		t.Parallel()
-
-		sg := testingSecretGenerator()
-		sg.SecretsName = "current-secret"
-
-		var c MockConfigMapInterface
-		configMap := mockConfig(sg.SecretsConfigMapName)
-		c.On("Create", configMap)
-		c.On("Get", sg.SecretsConfigMapName, metav1.GetOptions{})
-		configMap, err := sg.getSecretConfig(&c)
-		assert.NoError(t, err)
-		configMap.Data[currentSecretNameKey] = "current-secret"
-
-		var s MockSecretInterface
-		s.On("Get", "current-secret", metav1.GetOptions{})
-		secrets, err := sg.getSecret(&s, configMap)
-
-		assert.NoError(t, err)
-		assert.Nil(t, secrets)
-		s.AssertNotCalled(t, "Get", "current-secret", metav1.GetOptions{})
-	})
 }
 
 func TestExpandTemplates(t *testing.T) {
@@ -958,6 +935,29 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		assert.Equal(t, "value2", string(secrets.Data["new-name"]),
 			"If `name` has multiple previous names, then it should copy the first non-empty previous value")
 	})
+}
+
+func TestRollbackSecret(t *testing.T) {
+	t.Parallel()
+
+	sg := testingSecretGenerator()
+	sg.SecretsName = legacySecretName
+
+	var c MockConfigMapInterface
+	configMap := &v1.ConfigMap{Data: map[string]string{
+		configVersionKey:      "1",
+		currentSecretNameKey:  "current-secret",
+		previousSecretNameKey: sg.SecretsName,
+	}}
+	c.On("Update", configMap)
+
+	err := sg.rollbackSecret(&c, configMap)
+
+	assert.NoError(t, err)
+	c.AssertCalled(t, "Update", configMap)
+
+	assert.Equal(t, sg.SecretsName, configMap.Data[currentSecretNameKey])
+	assert.Equal(t, "current-secret", configMap.Data[previousSecretNameKey])
 }
 
 func TestUpdateSecret(t *testing.T) {
