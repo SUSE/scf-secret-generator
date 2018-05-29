@@ -45,6 +45,12 @@ var certExpiration = flag.Int(
 	"Certificate expiration (in days)",
 )
 
+var isInstall = flag.Bool(
+	"isInstall",
+	false,
+	"Generating initial secrets; not an upgrade",
+)
+
 func main() {
 	flag.Parse()
 
@@ -61,6 +67,7 @@ func main() {
 		SecretsName:         *secretsName,
 		SecretsGeneration:   *secretsGeneration,
 		CertExpiration:      *certExpiration,
+		IsInstall:           *isInstall,
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")
