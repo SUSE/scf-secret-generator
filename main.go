@@ -45,18 +45,24 @@ var certExpiration = flag.Int(
 	"Certificate expiration (in days)",
 )
 
-var isInstall = flag.Bool(
-	"isInstall",
-	false,
-	"Generating initial secrets; not an upgrade",
+var installMode = flag.String(
+	"mode",
+	"",
+	"Installation mode: either `install` or `upgrade`",
+)
+
+var roleManifest = flag.String(
+	"roleManifest",
+	"",
+	"Role manifest containing definitions for all secrets to be generated",
 )
 
 func main() {
 	flag.Parse()
 
-	if flag.NArg() != 1 {
-		fmt.Fprintf(flag.CommandLine.Output(), "Usage: %s [OPTIONS] ROLE-MANIFEST\n", os.Args[0])
-		flag.PrintDefaults()
+	if *installMode != "install" && *installMode != "upgrade" {
+		fmt.Fprintf(flag.CommandLine.Output(), "Invalid -mode: `%s`, must be either `install` or `upgrade`.\n", *installMode)
+		flag.Usage()
 		os.Exit(1)
 	}
 
@@ -67,7 +73,7 @@ func main() {
 		SecretsName:         *secretsName,
 		SecretsGeneration:   *secretsGeneration,
 		CertExpiration:      *certExpiration,
-		IsInstall:           *isInstall,
+		IsInstall:           (*installMode == "install"),
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")
