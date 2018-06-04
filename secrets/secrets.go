@@ -152,6 +152,10 @@ func defaultConfig(name string) *v1.ConfigMap {
 	}
 }
 
+// From this point forward high-level error messages are written to STDOUT for the benefit of the
+// test suite. Low-level error details (err.String()) are irrelevant for the tests, and will be
+// reported by the top-level caller during actual usage.
+
 // getSecretConfig creates or loads the configmap containing the secrets configuration.
 // It also verifies that the configmap can be updated.
 func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap, error) {
@@ -160,7 +164,7 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 
 	if sg.IsInstall {
 		// helm doesn't know about our config map and versioned secrets, and therefore won't
-		// delete them during uninstall. Terefore let's delete potential left-over config map
+		// delete them during uninstall. Therefore let's delete potential left-over config map
 		// from a previous installation.  We don't want to re-use values in a fresh install.
 		_ = c.Delete(sg.SecretsConfigMapName, &metav1.DeleteOptions{})
 
@@ -176,13 +180,13 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 		configMap, err = c.Get(sg.SecretsConfigMapName, metav1.GetOptions{})
 		if err == nil {
 			log.Printf("Loaded configmap `%s`\n", configMap.Name)
-			// Assume pre-release configMap without version is compatible with initial release
-			if configMap.Data[configVersionKey] == "" {
-				configMap.Data[configVersionKey] = currentConfigVersion
-				log.Printf("Added config version `%s` to pre-release configmap `%s`\n", currentConfigVersion, configMap.Name)
-			}
-			// So far there is only the initial config version
-			if configMap.Data[configVersionKey] != currentConfigVersion {
+			switch configMap.Data[configVersionKey] {
+			case "":
+				log.Printf("Adding config version to pre-release configmap `%s`\n", configMap.Name)
+				fallthrough
+			case "1":
+				// Nothing
+			default:
 				err = fmt.Errorf("Config map `%s` has unsupported config version `%s`", configMap.Name, configMap.Data[configVersionKey])
 				return nil, err
 			}
@@ -360,6 +364,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	return nil
 }
 
+// rollbackSecret switches back to previous secret (and makes the current secret the new previous one).
 func (sg *SecretGenerator) rollbackSecret(c configMapInterface, configMap *v1.ConfigMap) error {
 	log.Printf("Rollback secrets from `%s` to `%s`\n", configMap.Data[currentSecretNameKey], sg.SecretsName)
 	configMap.Data[previousSecretNameKey] = configMap.Data[currentSecretNameKey]
