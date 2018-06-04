@@ -58,7 +58,7 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.Configuration
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, expiration int, secrets *v1.Secret) error {
+func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string, expiration int, secrets *v1.Secret) error {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if !info.IsAuthority {
@@ -78,7 +78,7 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, serviceDomainSuffix 
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		err := createCert(certInfo, namespace, serviceDomainSuffix, secrets, id, expiration)
+		err := createCert(certInfo, namespace, clusterDomain, secrets, id, expiration)
 		if err != nil {
 			return err
 		}
@@ -126,7 +126,7 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix string, secrets *v1.Secret, id string, expiration int) error {
+func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, secrets *v1.Secret, id string, expiration int) error {
 	var err error
 	info := certInfo[id]
 
@@ -147,7 +147,7 @@ func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix str
 	if info.RoleName != "" {
 		addHost(req, true, info.RoleName)
 		addHost(req, true, fmt.Sprintf("%s.%s.svc", info.RoleName, namespace))
-		addHost(req, true, fmt.Sprintf("%s.%s.svc.cluster.local", info.RoleName, namespace))
+		addHost(req, true, fmt.Sprintf("%s.%s.svc.%s", info.RoleName, namespace, clusterDomain))
 
 		// Generate wildcard certs for stateful sets for self-clustering roles
 		// We do this instead of having a bunch of subject alt names so that the
@@ -155,9 +155,7 @@ func createCert(certInfo map[string]CertInfo, namespace, serviceDomainSuffix str
 		prefix := fmt.Sprintf("*.%s-set", info.RoleName)
 		addHost(req, false, prefix)
 		addHost(req, false, fmt.Sprintf("%s.%s.svc", prefix, namespace))
-		addHost(req, false, fmt.Sprintf("%s.%s.svc.cluster.local", prefix, namespace))
-
-		addHost(req, true, fmt.Sprintf("%s.%s", info.RoleName, serviceDomainSuffix))
+		addHost(req, false, fmt.Sprintf("%s.%s.svc.%s", prefix, namespace, clusterDomain))
 	}
 
 	for _, name := range info.SubjectNames {

@@ -21,12 +21,6 @@ var namespace = flag.String(
 	"Kubernetes namespace",
 )
 
-var serviceDomainSuffix = flag.String(
-	"serviceDomainSuffix",
-	"",
-	"Service Domain Suffix",
-)
-
 var secretsName = flag.String(
 	"secretsName",
 	"",
@@ -57,6 +51,12 @@ var roleManifest = flag.String(
 	"Role manifest containing definitions for all secrets to be generated",
 )
 
+var clusterDomain = flag.String(
+	"clusterDomain",
+	"cluster.local",
+	"Kubernetes cluster domain, normally cluster.local",
+)
+
 func main() {
 	flag.Parse()
 
@@ -67,22 +67,19 @@ func main() {
 	}
 
 	sg := secrets.SecretGenerator{
-		Domain:              *domain,
-		Namespace:           *namespace,
-		ServiceDomainSuffix: *serviceDomainSuffix,
-		SecretsName:         *secretsName,
-		SecretsGeneration:   *secretsGeneration,
-		CertExpiration:      *certExpiration,
-		IsInstall:           (*installMode == "install"),
+		Domain:            *domain,
+		Namespace:         *namespace,
+		SecretsName:       *secretsName,
+		SecretsGeneration: *secretsGeneration,
+		CertExpiration:    *certExpiration,
+		IsInstall:         (*installMode == "install"),
+		ClusterDomain:     *clusterDomain,
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")
 	}
 	if sg.Namespace == "" {
 		log.Fatal("-namespace is not set")
-	}
-	if sg.ServiceDomainSuffix == "" {
-		log.Fatal("-serviceDomainSuffix is not set")
 	}
 	if sg.SecretsName == "" {
 		log.Fatal("-secretsName is not set")

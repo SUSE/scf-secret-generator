@@ -42,12 +42,12 @@ const generatorSuffix = ".generator"
 type SecretGenerator struct {
 	Domain               string
 	Namespace            string
-	ServiceDomainSuffix  string
 	SecretsName          string
 	SecretsGeneration    string
 	SecretsConfigMapName string
 	CertExpiration       int
 	IsInstall            bool
+	ClusterDomain        string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -237,9 +237,9 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 
 func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
 	mapping := map[string]string{
-		"DOMAIN":                     sg.Domain,
-		"KUBERNETES_NAMESPACE":       sg.Namespace,
-		"KUBE_SERVICE_DOMAIN_SUFFIX": sg.ServiceDomainSuffix,
+		"DOMAIN":                    sg.Domain,
+		"KUBERNETES_NAMESPACE":      sg.Namespace,
+		"KUBERNETES_CLUSTER_DOMAIN": sg.ClusterDomain,
 	}
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Generator == nil {
@@ -343,7 +343,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate SSL ...")
 
-	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ServiceDomainSuffix, sg.CertExpiration, secrets)
+	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, secrets)
 
 	if !sg.IsInstall {
 		log.Println("Removing secrets that are no longer being used")

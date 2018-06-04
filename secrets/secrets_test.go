@@ -129,12 +129,12 @@ func testingSecretGenerator() SecretGenerator {
 	return SecretGenerator{
 		Domain:               "domain",
 		Namespace:            "namespace",
-		ServiceDomainSuffix:  "suffix",
 		SecretsName:          "new-secret",
 		SecretsGeneration:    "1",
 		SecretsConfigMapName: "already-exists",
 		CertExpiration:       365,
 		IsInstall:            false,
+		ClusterDomain:        "cluster.domain",
 	}
 }
 
@@ -474,7 +474,7 @@ func TestExpandTemplates(t *testing.T) {
 						SubjectNames: []string{
 							"*.{{.DOMAIN}}",
 							"foo.{{.KUBERNETES_NAMESPACE}}",
-							"svc.{{.KUBE_SERVICE_DOMAIN_SUFFIX}}"},
+							"svc.{{.KUBERNETES_CLUSTER_DOMAIN}}"},
 					},
 				},
 			},
@@ -489,7 +489,7 @@ func TestExpandTemplates(t *testing.T) {
 	assert.Len(t, names, 3)
 	assert.Equal(t, "*.domain", names[0])
 	assert.Equal(t, "foo.namespace", names[1])
-	assert.Equal(t, "svc.suffix", names[2])
+	assert.Equal(t, "svc.cluster.domain", names[2])
 }
 
 func TestGenerateSecret(t *testing.T) {
