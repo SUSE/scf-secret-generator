@@ -16,6 +16,7 @@ import (
 	"github.com/SUSE/scf-secret-generator/util"
 
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/client-go/kubernetes"
 	"k8s.io/client-go/rest"
@@ -185,8 +186,9 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 				err = fmt.Errorf("Config map `%s` has unsupported config version `%s`", configMap.Name, configMap.Data[configVersionKey])
 				return nil, err
 			}
-		} else {
-			log.Printf("Failed to fetch configmap `%s`; assuming upgrade from legacy install\n", sg.SecretsConfigMapName)
+			configMap.Data[configVersionKey] = currentConfigVersion
+		} else if errors.IsNotFound(err) {
+			log.Printf("Configmap `%s` not found; assuming upgrade from legacy install\n", sg.SecretsConfigMapName)
 			configMap = defaultConfig(sg.SecretsConfigMapName)
 			configMap.Data[currentSecretNameKey] = legacySecretName
 			_, err = c.Create(configMap)
@@ -195,6 +197,9 @@ func (sg *SecretGenerator) getSecretConfig(c configMapInterface) (*v1.ConfigMap,
 				return nil, err
 			}
 			log.Printf("Created configmap `%s` for legacy install\n", configMap.Name)
+		} else {
+			log.Printf("Failed to fetch configmap `%s`\n", sg.SecretsConfigMapName)
+			return nil, err
 		}
 	}
 	// make sure we can update the config map before we create the new secrets (and allow pods to start running)

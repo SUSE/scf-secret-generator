@@ -2,7 +2,6 @@ package secrets
 
 import (
 	"encoding/json"
-	"errors"
 	"testing"
 
 	"github.com/SUSE/scf-secret-generator/model"
@@ -12,7 +11,9 @@ import (
 	"github.com/stretchr/testify/mock"
 	"github.com/stretchr/testify/require"
 	v1 "k8s.io/api/core/v1"
+	"k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
+	"k8s.io/apimachinery/pkg/runtime/schema"
 )
 
 type MockBase struct {
@@ -37,7 +38,8 @@ func (m *MockSecretInterface) Get(name string, options metav1.GetOptions) (*v1.S
 	m.Called(name, options)
 
 	if name == legacySecretName {
-		return nil, errors.New("missing")
+		gr := schema.GroupResource{Group: "", Resource: "test"}
+		return nil, errors.NewNotFound(gr, name)
 	}
 	secret := v1.Secret{
 		ObjectMeta: metav1.ObjectMeta{
@@ -72,7 +74,8 @@ func (m *MockConfigMapInterface) Delete(name string, options *metav1.DeleteOptio
 func (m *MockConfigMapInterface) Get(name string, options metav1.GetOptions) (*v1.ConfigMap, error) {
 	m.Called(name, options)
 	if name == defaultSecretsConfigMapName {
-		return nil, errors.New("not found")
+		gr := schema.GroupResource{Group: "", Resource: "test"}
+		return nil, errors.NewNotFound(gr, name)
 	}
 	return mockConfig(name), nil
 }
