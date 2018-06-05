@@ -523,8 +523,9 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.Equal(t, []byte("obsolete"), secrets.Data["non-generated"])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Empty(t, secrets.Data["non-generated"])
 	})
 
@@ -558,8 +559,9 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["dirty"])
 		assert.Empty(t, secrets.Data["dirty"+generatorSuffix])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["dirty"])
 		assert.NotEmpty(t, secrets.Data["dirty"+generatorSuffix])
 	})
@@ -595,8 +597,9 @@ func TestGenerateSecret(t *testing.T) {
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 		assert.NotEmpty(t, generatorInput)
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 		assert.Equal(t, generatorInput, secrets.Data["clean"+generatorSuffix])
 	})
@@ -632,8 +635,9 @@ func TestGenerateSecret(t *testing.T) {
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 
 		sg.SecretsGeneration = "2"
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["clean"])
 		assert.NotEqual(t, []byte("clean"), secrets.Data["clean"])
 		assert.Equal(t, generatorInput, secrets.Data["clean"+generatorSuffix],
@@ -671,8 +675,9 @@ func TestGenerateSecret(t *testing.T) {
 		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
 
 		sg.SecretsGeneration = "2"
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
 
@@ -719,8 +724,9 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ssh-key-fingerprint"])
 		assert.Empty(t, secrets.Data["ssh-key-fingerprint"+generatorSuffix])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
 		assert.NotEmpty(t, secrets.Data["ssh-key"+generatorSuffix])
 		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
@@ -768,8 +774,9 @@ func TestGenerateSecret(t *testing.T) {
 		setSecret(secrets, manifest.Configuration.Variables[0], "key")
 		setSecret(secrets, manifest.Configuration.Variables[1], "fingerprint")
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
 		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key-fingerprint"])
 	})
@@ -817,8 +824,9 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ca-key"])
 		assert.Empty(t, secrets.Data["ca-key"+generatorSuffix])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
 		assert.NotEmpty(t, secrets.Data["ca-cert"+generatorSuffix])
 		assert.NotEmpty(t, secrets.Data["ca-key"])
@@ -866,8 +874,9 @@ func TestGenerateSecret(t *testing.T) {
 		setSecret(secrets, manifest.Configuration.Variables[0], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[1], "key")
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ca-key"])
 	})
@@ -933,8 +942,9 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ssl-key"])
 		assert.Empty(t, secrets.Data["ssl-key"+generatorSuffix])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.NotEmpty(t, secrets.Data["ssl-key"])
@@ -1000,8 +1010,9 @@ func TestGenerateSecret(t *testing.T) {
 		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
 		setSecret(secrets, manifest.Configuration.Variables[3], "key")
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
 		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 	})
@@ -1097,8 +1108,9 @@ func TestGenerateSecret(t *testing.T) {
 		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
 		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorSuffix])
 
-		sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(manifest, secrets, configMap)
 
+		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.Contains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "subject_names")

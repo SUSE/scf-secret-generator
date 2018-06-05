@@ -3,7 +3,6 @@ package ssl
 import (
 	"fmt"
 	glog "log"
-	"os"
 	"time"
 
 	"github.com/SUSE/scf-secret-generator/model"
@@ -35,26 +34,57 @@ type CertInfo struct {
 }
 
 // RecordCertInfo record cert information for later generation
-func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.ConfigurationVariable) {
+func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.ConfigurationVariable) error {
+	if len(configVar.Generator.ID) == 0 {
+		return fmt.Errorf("Config variable `%s` has no ID value", configVar.Name)
+	}
+	if configVar.Generator.Type != model.GeneratorTypeCACertificate && configVar.Generator.Type != model.GeneratorTypeCertificate {
+		return fmt.Errorf("Config variable `%s` does not have a valid SSL generator type", configVar.Name)
+	}
+
 	info := certInfo[configVar.Generator.ID]
+
+	isAuthority := (configVar.Generator.Type == model.GeneratorTypeCACertificate)
+	if (len(info.CertificateName) > 0 || len(info.PrivateKeyName) > 0) && isAuthority != info.IsAuthority {
+		return fmt.Errorf("Inconsistent cert type (CA vs non-CA) between Cert and Key vars for id `%s`", configVar.Generator.ID)
+	}
+	info.IsAuthority = isAuthority
 
 	switch configVar.Generator.ValueType {
 	case model.ValueTypeCertificate:
+		if len(info.CertificateName) > 0 {
+			return fmt.Errorf("Multiple variables define certificate name for SSL id `%s`", configVar.Generator.ID)
+		}
 		info.CertificateName = util.ConvertNameToKey(configVar.Name)
 	case model.ValueTypePrivateKey:
+		if len(info.PrivateKeyName) > 0 {
+			return fmt.Errorf("Multiple variables define private key name for SSL id `%s`", configVar.Generator.ID)
+		}
 		info.PrivateKeyName = util.ConvertNameToKey(configVar.Name)
 	default:
-		glog.Printf("Invalid certificate generator value_type: %s", configVar.Generator.ValueType)
+		return fmt.Errorf("Config variable `%s` has invalid value type `%s`", configVar.Name, configVar.Generator.ValueType)
 	}
-	info.IsAuthority = (configVar.Generator.Type == model.GeneratorTypeCACertificate)
 
 	if len(configVar.Generator.SubjectNames) > 0 {
+		if configVar.Generator.Type == model.GeneratorTypeCACertificate {
+			return fmt.Errorf("CA Cert or key for SSL id `%s` should not have subject names", configVar.Generator.ID)
+		}
+		if configVar.Generator.ValueType == model.ValueTypePrivateKey {
+			return fmt.Errorf("Private key for SSL id `%s` should not have subject names", configVar.Generator.ID)
+		}
 		info.SubjectNames = configVar.Generator.SubjectNames
 	}
 	if configVar.Generator.RoleName != "" {
+		if configVar.Generator.Type == model.GeneratorTypeCACertificate {
+			return fmt.Errorf("CA Cert or key for SSL id `%s` should not have a role name", configVar.Generator.ID)
+		}
+		if configVar.Generator.ValueType == model.ValueTypePrivateKey {
+			return fmt.Errorf("Private key for SSL id `%s` should not have a role name", configVar.Generator.ID)
+		}
 		info.RoleName = configVar.Generator.RoleName
 	}
 	certInfo[configVar.Generator.ID] = info
+	return nil
 }
 
 // GenerateCerts creates an SSL cert and private key
@@ -76,7 +106,7 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string
 		}
 		glog.Printf("- SSL CRT: %s (%s / %s)\n", id, info.CertificateName, info.PrivateKeyName)
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
-			fmt.Fprintf(os.Stderr, "Warning: certificate %s has no names\n", info.CertificateName)
+			glog.Printf("Warning: certificate %s has no names\n", info.CertificateName)
 		}
 		err := createCert(certInfo, namespace, clusterDomain, secrets, id, expiration)
 		if err != nil {

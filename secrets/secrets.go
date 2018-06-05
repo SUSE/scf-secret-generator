@@ -325,7 +325,10 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 			password.GeneratePassword(secrets, configVar.Name)
 
 		case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
-			ssl.RecordCertInfo(certInfo, configVar)
+			err := ssl.RecordCertInfo(certInfo, configVar)
+			if err != nil {
+				return err
+			}
 
 		case model.GeneratorTypeSSH:
 			ssh.RecordKeyInfo(sshKeys, configVar)
@@ -341,9 +344,11 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		return err
 	}
 
-	log.Println("Generate SSL ...")
-
-	ssl.GenerateCerts(certInfo, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, secrets)
+	log.Println("Generate SSL certs and keys...")
+	err = ssl.GenerateCerts(certInfo, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, secrets)
+	if err != nil {
+		return err
+	}
 
 	if !sg.IsInstall {
 		log.Println("Removing secrets that are no longer being used")
