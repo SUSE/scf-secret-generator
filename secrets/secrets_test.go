@@ -127,14 +127,14 @@ func setSecret(secrets *v1.Secret, configVar *model.ConfigurationVariable, value
 
 func testingSecretGenerator() SecretGenerator {
 	return SecretGenerator{
-		Domain:               "domain",
-		Namespace:            "namespace",
-		SecretsName:          "new-secret",
-		SecretsGeneration:    "1",
-		SecretsConfigMapName: "already-exists",
 		CertExpiration:       365,
-		IsInstall:            false,
 		ClusterDomain:        "cluster.domain",
+		Domain:               "domain",
+		IsInstall:            false,
+		Namespace:            "namespace",
+		SecretsConfigMapName: "already-exists",
+		SecretsGeneration:    "1",
+		SecretsName:          "new-secret",
 	}
 }
 

@@ -40,14 +40,14 @@ const generatorSuffix = ".generator"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
-	Domain               string
-	Namespace            string
-	SecretsName          string
-	SecretsGeneration    string
-	SecretsConfigMapName string
 	CertExpiration       int
-	IsInstall            bool
 	ClusterDomain        string
+	Domain               string
+	IsInstall            bool
+	Namespace            string
+	SecretsConfigMapName string
+	SecretsGeneration    string
+	SecretsName          string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -238,8 +238,8 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
 	mapping := map[string]string{
 		"DOMAIN":                    sg.Domain,
-		"KUBERNETES_NAMESPACE":      sg.Namespace,
 		"KUBERNETES_CLUSTER_DOMAIN": sg.ClusterDomain,
+		"KUBERNETES_NAMESPACE":      sg.Namespace,
 	}
 	for _, configVar := range manifest.Configuration.Variables {
 		if configVar.Generator == nil {

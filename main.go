@@ -9,34 +9,22 @@ import (
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
-var domain = flag.String(
-	"domain",
-	"",
-	"Domain",
-)
-
-var namespace = flag.String(
-	"namespace",
-	"",
-	"Kubernetes namespace",
-)
-
-var secretsName = flag.String(
-	"secretsName",
-	"",
-	"Secrets Name (version string of the helm chart)",
-)
-
-var secretsGeneration = flag.String(
-	"secretsGeneration",
-	"",
-	"Secrets Generation (rotation counter)",
-)
-
 var certExpiration = flag.Int(
 	"certExpiration",
 	30*365+7, // just over 30 years
 	"Certificate expiration (in days)",
+)
+
+var clusterDomain = flag.String(
+	"clusterDomain",
+	"cluster.local",
+	"Kubernetes cluster domain, normally cluster.local",
+)
+
+var domain = flag.String(
+	"domain",
+	"",
+	"Domain",
 )
 
 var installMode = flag.String(
@@ -45,16 +33,28 @@ var installMode = flag.String(
 	"Installation mode: either `install` or `upgrade`",
 )
 
+var namespace = flag.String(
+	"namespace",
+	"",
+	"Kubernetes namespace",
+)
+
 var roleManifest = flag.String(
 	"roleManifest",
 	"",
 	"Role manifest containing definitions for all secrets to be generated",
 )
 
-var clusterDomain = flag.String(
-	"clusterDomain",
-	"cluster.local",
-	"Kubernetes cluster domain, normally cluster.local",
+var secretsGeneration = flag.String(
+	"secretsGeneration",
+	"",
+	"Secrets Generation (rotation counter)",
+)
+
+var secretsName = flag.String(
+	"secretsName",
+	"",
+	"Secrets Name (version string of the helm chart)",
 )
 
 func main() {
@@ -67,13 +67,13 @@ func main() {
 	}
 
 	sg := secrets.SecretGenerator{
-		Domain:            *domain,
-		Namespace:         *namespace,
-		SecretsName:       *secretsName,
-		SecretsGeneration: *secretsGeneration,
 		CertExpiration:    *certExpiration,
-		IsInstall:         (*installMode == "install"),
 		ClusterDomain:     *clusterDomain,
+		Domain:            *domain,
+		IsInstall:         (*installMode == "install"),
+		Namespace:         *namespace,
+		SecretsGeneration: *secretsGeneration,
+		SecretsName:       *secretsName,
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")
@@ -81,11 +81,11 @@ func main() {
 	if sg.Namespace == "" {
 		log.Fatal("-namespace is not set")
 	}
-	if sg.SecretsName == "" {
-		log.Fatal("-secretsName is not set")
-	}
 	if sg.SecretsGeneration == "" {
 		log.Fatal("-secretsGeneration is not set")
+	}
+	if sg.SecretsName == "" {
+		log.Fatal("-secretsName is not set")
 	}
 
 	file, err := os.Open(flag.Arg(0))
