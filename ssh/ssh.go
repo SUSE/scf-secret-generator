@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"fmt"
 	"log"
 
 	"golang.org/x/crypto/ssh"
@@ -20,14 +21,31 @@ type Key struct {
 	Fingerprint string // Name to associate with fingerprint
 }
 
-// GenerateKey will create a private key and fingerprint
-func GenerateKey(secrets *v1.Secret, key Key) {
+// GenerateKeys will create a private key and fingerprint
+func GenerateKeys(keys map[string]Key, secrets *v1.Secret) error {
+	for id, key := range keys {
+		if len(key.PrivateKey) == 0 {
+			return fmt.Errorf("No private key name defined for SSH id `%s`", id)
+		}
+		if len(key.Fingerprint) == 0 {
+			return fmt.Errorf("No fingerprint name defined for SSH id `%s`", id)
+		}
+		err := generateKey(secrets, key)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// generateKey will create a private key and fingerprint
+func generateKey(secrets *v1.Secret, key Key) error {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
 
 	// Only create keys, don't update them
 	if len(secrets.Data[secretKey]) > 0 {
-		return
+		return nil
 	}
 
 	log.Printf("- SSH priK: %s\n", key.PrivateKey)
@@ -35,7 +53,7 @@ func GenerateKey(secrets *v1.Secret, key Key) {
 	// generate private key
 	private, err := rsa.GenerateKey(rand.Reader, 4096)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	privateBlock := &pem.Block{
@@ -47,12 +65,14 @@ func GenerateKey(secrets *v1.Secret, key Key) {
 	// generate MD5 fingerprint
 	public, err := ssh.NewPublicKey(&private.PublicKey)
 	if err != nil {
-		log.Fatal(err)
+		return err
 	}
 
 	// PEM encode private key
 	secrets.Data[secretKey] = pem.EncodeToMemory(privateBlock)
 	secrets.Data[fingerprintKey] = []byte(ssh.FingerprintLegacyMD5(public))
+
+	return nil
 }
 
 // RecordKeyInfo records priave key or fingerprint names for later generation

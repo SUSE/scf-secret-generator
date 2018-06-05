@@ -335,10 +335,10 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		}
 	}
 
-	log.Println("Generate SSH ...")
-
-	for _, key := range sshKeys {
-		ssh.GenerateKey(secrets, key)
+	log.Println("Generate SSH keys...")
+	err := ssh.GenerateKeys(sshKeys, secrets)
+	if err != nil {
+		return err
 	}
 
 	log.Println("Generate SSL ...")

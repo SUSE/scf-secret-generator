@@ -12,7 +12,7 @@ import (
 	"k8s.io/api/core/v1"
 )
 
-// GenerateKey tests
+// generateKey tests
 
 func TestNewKeyIsCreated(t *testing.T) {
 	t.Parallel()
@@ -24,8 +24,9 @@ func TestNewKeyIsCreated(t *testing.T) {
 		Fingerprint: "bar",
 	}
 
-	GenerateKey(secrets, key)
+	err := generateKey(secrets, key)
 
+	assert.NoError(t, err)
 	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
 	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
 
@@ -51,9 +52,68 @@ func TestExistingKeyIsNotChanged(t *testing.T) {
 		Fingerprint: "BAR",
 	}
 
-	GenerateKey(secrets, key)
+	err := generateKey(secrets, key)
+
+	assert.NoError(t, err)
 	assert.Equal(t, fooData, secrets.Data["foo"])
 	assert.Equal(t, barData, secrets.Data["bar"])
+}
+
+// GenerateKey tests
+
+func TestGenerateKeys(t *testing.T) {
+	t.Parallel()
+
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+
+	keys := map[string]Key{
+		"mysshkey": Key{
+			PrivateKey:  "foo",
+			Fingerprint: "bar",
+		},
+	}
+
+	err := GenerateKeys(keys, secrets)
+
+	assert.NoError(t, err)
+	assert.Contains(t, string(secrets.Data["foo"]), "BEGIN RSA PRIVATE KEY")
+	assert.Contains(t, string(secrets.Data["foo"]), "END RSA PRIVATE KEY")
+
+	// 16 colon separated bytes = 47
+	// 00:11:22:33:44:55:66:77:88:99:aa:bb:cc:dd:ee:ff
+	assert.Len(t, secrets.Data["bar"], 47)
+}
+
+func TestMissingPrivateKey(t *testing.T) {
+	t.Parallel()
+
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+
+	keys := map[string]Key{
+		"mysshkey": Key{
+			Fingerprint: "bar",
+		},
+	}
+
+	err := GenerateKeys(keys, secrets)
+
+	assert.EqualError(t, err, "No private key name defined for SSH id `mysshkey`")
+}
+
+func TestMissingFingerprint(t *testing.T) {
+	t.Parallel()
+
+	secrets := &v1.Secret{Data: map[string][]byte{}}
+
+	keys := map[string]Key{
+		"mysshkey": Key{
+			PrivateKey: "foo",
+		},
+	}
+
+	err := GenerateKeys(keys, secrets)
+
+	assert.EqualError(t, err, "No fingerprint name defined for SSH id `mysshkey`")
 }
 
 // RecordKeyInfo tests
