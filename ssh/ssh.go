@@ -21,8 +21,8 @@ type Key struct {
 	Fingerprint string // Name to associate with fingerprint
 }
 
-// GenerateKeys will create a private key and fingerprint
-func GenerateKeys(keys map[string]Key, secrets *v1.Secret) error {
+// GenerateAllKeys will create private keys and fingerprints for all recorded SSH variables
+func GenerateAllKeys(keys map[string]Key, secrets *v1.Secret) error {
 	for id, key := range keys {
 		if len(key.PrivateKey) == 0 {
 			return fmt.Errorf("No private key name defined for SSH id `%s`", id)
@@ -38,7 +38,7 @@ func GenerateKeys(keys map[string]Key, secrets *v1.Secret) error {
 	return nil
 }
 
-// generateKey will create a private key and fingerprint
+// generateKey will create a single private key and fingerprint pair
 func generateKey(secrets *v1.Secret, key Key) error {
 	secretKey := util.ConvertNameToKey(key.PrivateKey)
 	fingerprintKey := util.ConvertNameToKey(key.Fingerprint)
@@ -76,16 +76,33 @@ func generateKey(secrets *v1.Secret, key Key) error {
 }
 
 // RecordKeyInfo records priave key or fingerprint names for later generation
-func RecordKeyInfo(keys map[string]Key, configVar *model.ConfigurationVariable) {
+func RecordKeyInfo(keys map[string]Key, configVar *model.ConfigurationVariable) error {
+	if len(configVar.Generator.ID) == 0 {
+		return fmt.Errorf("Config variable `%s` has no ID value", configVar.Name)
+	}
+	if configVar.Generator.Type != model.GeneratorTypeSSH {
+		return fmt.Errorf("Config variable `%s` does not have a valid SSH generator type", configVar.Name)
+	}
+
 	// Get or create the key from the map, there should always be
 	// a pair of private keys and fingerprints
 	key := keys[configVar.Generator.ID]
 
-	if configVar.Generator.ValueType == model.ValueTypeFingerprint {
+	switch configVar.Generator.ValueType {
+	case model.ValueTypeFingerprint:
+		if len(key.Fingerprint) > 0 {
+			return fmt.Errorf("Multiple variables define fingerprints name for SSH id `%s`", configVar.Generator.ID)
+		}
 		key.Fingerprint = configVar.Name
-	} else if configVar.Generator.ValueType == model.ValueTypePrivateKey {
+	case model.ValueTypePrivateKey:
+		if len(key.PrivateKey) > 0 {
+			return fmt.Errorf("Multiple variables define private key name for SSH id `%s`", configVar.Generator.ID)
+		}
 		key.PrivateKey = configVar.Name
+	default:
+		return fmt.Errorf("Config variable `%s` has invalid value type `%s`", configVar.Name, configVar.Generator.ValueType)
 	}
 
 	keys[configVar.Generator.ID] = key
+	return nil
 }

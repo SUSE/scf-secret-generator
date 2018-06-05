@@ -331,7 +331,10 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 			}
 
 		case model.GeneratorTypeSSH:
-			ssh.RecordKeyInfo(sshKeys, configVar)
+			err := ssh.RecordKeyInfo(sshKeys, configVar)
+			if err != nil {
+				return err
+			}
 
 		default:
 			log.Printf("Warning: variable `%s` has unknown generator type `%s`\n", configVar.Name, configVar.Generator.Type)
@@ -339,7 +342,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	}
 
 	log.Println("Generate SSH keys...")
-	err := ssh.GenerateKeys(sshKeys, secrets)
+	err := ssh.GenerateAllKeys(sshKeys, secrets)
 	if err != nil {
 		return err
 	}
