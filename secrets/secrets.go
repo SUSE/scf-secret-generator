@@ -411,7 +411,7 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 
 	if obsoleteSecretName != "" {
 		err = s.Delete(obsoleteSecretName, &metav1.DeleteOptions{})
-		if err != nil {
+		if err != nil && obsoleteSecretName != legacySecretName {
 			log.Printf(fmt.Sprintf("Error deleting secrets `%s`: %s", obsoleteSecretName, err))
 			// *don't* return an error
 		}
