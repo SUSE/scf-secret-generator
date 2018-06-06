@@ -171,7 +171,7 @@ func TestGetSecretConfig(t *testing.T) {
 
 		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
 		assert.Empty(t, configMap.Data[currentSecretNameKey])
-		assert.Equal(t, "0", configMap.Data[currentSecretGenerationKey])
+		assert.Empty(t, configMap.Data[currentSecretGenerationKey])
 		assert.Equal(t, currentConfigVersion, configMap.Data[configVersionKey])
 	})
 
@@ -202,7 +202,7 @@ func TestGetSecretConfig(t *testing.T) {
 
 		assert.Equal(t, sg.SecretsConfigMapName, configMap.Name)
 		assert.Equal(t, legacySecretName, configMap.Data[currentSecretNameKey])
-		assert.Equal(t, "0", configMap.Data[currentSecretGenerationKey])
+		assert.Empty(t, configMap.Data[currentSecretGenerationKey])
 		assert.Equal(t, currentConfigVersion, configMap.Data[configVersionKey])
 	})
 

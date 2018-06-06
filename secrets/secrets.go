@@ -146,8 +146,7 @@ func defaultConfig(name string) *v1.ConfigMap {
 			Name: name,
 		},
 		Data: map[string]string{
-			configVersionKey:           currentConfigVersion,
-			currentSecretGenerationKey: "0",
+			configVersionKey: currentConfigVersion,
 		},
 	}
 }
@@ -266,7 +265,9 @@ func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
 // in the manifest will be regenerated.
 func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
 	if sg.SecretsGeneration != configMap.Data[currentSecretGenerationKey] {
-		log.Printf("Rotating secrets; generation `%s` -> `%s`\n", configMap.Data[currentSecretGenerationKey], sg.SecretsGeneration)
+		if len(configMap.Data[currentSecretGenerationKey]) > 0 {
+			log.Printf("Rotating secrets; generation `%s` -> `%s`\n", configMap.Data[currentSecretGenerationKey], sg.SecretsGeneration)
+		}
 
 		immutable := make(map[string]bool)
 		for _, configVar := range manifest.Configuration.Variables {
