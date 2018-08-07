@@ -119,10 +119,20 @@ func (sg *SecretGenerator) mockConfig() *v1.ConfigMap {
 	return mockConfig(sg.SecretsConfigMapName)
 }
 
-func setSecret(secrets *v1.Secret, configVar *model.ConfigurationVariable, value string) {
+func setSecret(secrets *v1.Secret, configVar *model.VariableDefinition, value string) {
 	name := util.ConvertNameToKey(configVar.Name)
 	secrets.Data[name] = []byte(value)
-	secrets.Data[name+generatorSuffix], _ = json.Marshal(configVar.Generator)
+	secrets.Data[name+generatorSuffix], _ = json.Marshal(configVar)
+}
+
+func setSecretKey(secrets *v1.Secret, configVar *model.VariableDefinition, value string) {
+	name := util.ConvertNameToKey(configVar.Name) + model.KeySuffix
+	secrets.Data[name] = []byte(value)
+}
+
+func setSecretFingerprint(secrets *v1.Secret, configVar *model.VariableDefinition, value string) {
+	name := util.ConvertNameToKey(configVar.Name) + model.FingerprintSuffix
+	secrets.Data[name] = []byte(value)
 }
 
 func testingSecretGenerator() SecretGenerator {
@@ -462,20 +472,19 @@ func TestExpandTemplates(t *testing.T) {
 	sg := testingSecretGenerator()
 
 	manifest := model.Manifest{
-		Configuration: &model.Configuration{
-			Variables: []*model.ConfigurationVariable{
-				{
-					Name:   "ssl-cert",
+		Variables: model.Variables{
+			{
+				Name: "ssl-cert",
+				Type: model.VariableTypeCertificate,
+				Options: model.VariableOptions{
+					"common_name": "foo.{{.KUBERNETES_NAMESPACE}}",
+					"alternative_names": []string{
+						"*.{{.DOMAIN}}",
+						"foo.{{.KUBERNETES_NAMESPACE}}",
+						"svc.{{.KUBERNETES_CLUSTER_DOMAIN}}"},
+				},
+				CVOptions: model.CVOptions{
 					Secret: true,
-					Generator: &model.ConfigurationVariableGenerator{
-						ID:        "sslcert",
-						Type:      model.GeneratorTypeCertificate,
-						ValueType: model.ValueTypeCertificate,
-						SubjectNames: []string{
-							"*.{{.DOMAIN}}",
-							"foo.{{.KUBERNETES_NAMESPACE}}",
-							"svc.{{.KUBERNETES_CLUSTER_DOMAIN}}"},
-					},
 				},
 			},
 		},
@@ -484,15 +493,18 @@ func TestExpandTemplates(t *testing.T) {
 	err := sg.expandTemplates(manifest)
 	assert.NoError(t, err)
 
-	names := manifest.Configuration.Variables[0].Generator.SubjectNames
+	params, err := manifest.Variables[0].OptionsAsCertificateParams()
+	assert.NoError(t, err)
+	assert.Equal(t, "foo.namespace", params.CommonName)
 
+	names := params.AlternativeNames
 	assert.Len(t, names, 3)
 	assert.Equal(t, "*.domain", names[0])
 	assert.Equal(t, "foo.namespace", names[1])
 	assert.Equal(t, "svc.cluster.domain", names[2])
 }
 
-func TestGenerateSecret(t *testing.T) {
+func TestGeneratePasswordSecret(t *testing.T) {
 	t.Parallel()
 
 	t.Run("Legacy secrets without generator are removed", func(t *testing.T) {
@@ -501,10 +513,11 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "non-generated",
+			Variables: model.Variables{
+				{
+					Name: "non-generated",
+					Type: model.EmptyType,
+					CVOptions: model.CVOptions{
 						Secret: true,
 					},
 				},
@@ -535,14 +548,12 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "dirty",
+			Variables: model.Variables{
+				{
+					Name: "dirty",
+					Type: model.VariableTypePassword,
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
 					},
 				},
 			},
@@ -572,14 +583,12 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "clean",
+			Variables: model.Variables{
+				{
+					Name: "clean",
+					Type: model.VariableTypePassword,
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
 					},
 				},
 			},
@@ -593,7 +602,7 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
+		setSecret(secrets, manifest.Variables[0], "clean")
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 		assert.NotEmpty(t, generatorInput)
 
@@ -610,14 +619,12 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "clean",
+			Variables: model.Variables{
+				{
+					Name: "clean",
+					Type: model.VariableTypePassword,
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
 					},
 				},
 			},
@@ -631,7 +638,7 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
+		setSecret(secrets, manifest.Variables[0], "clean")
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 
 		sg.SecretsGeneration = "2"
@@ -650,15 +657,13 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:      "clean",
+			Variables: model.Variables{
+				{
+					Name: "clean",
+					Type: model.VariableTypePassword,
+					CVOptions: model.CVOptions{
 						Secret:    true,
 						Immutable: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							Type: model.GeneratorTypePassword,
-						},
 					},
 				},
 			},
@@ -672,7 +677,7 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[0], "clean")
+		setSecret(secrets, manifest.Variables[0], "clean")
 
 		sg.SecretsGeneration = "2"
 		err := sg.generateSecret(manifest, secrets, configMap)
@@ -680,6 +685,10 @@ func TestGenerateSecret(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
 	})
+}
+
+func TestGenerateSSHSecret(t *testing.T) {
+	t.Parallel()
 
 	t.Run("New SSH key is generated", func(t *testing.T) {
 		t.Parallel()
@@ -687,25 +696,12 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ssh-key",
+			Variables: model.Variables{
+				{
+					Name: "ssh-key",
+					Type: model.VariableTypeSSH,
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "ssh-key",
-							Type:      model.GeneratorTypeSSH,
-							ValueType: model.ValueTypePrivateKey,
-						},
-					},
-					{
-						Name:   "ssh-key-fingerprint",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "ssh-key",
-							Type:      model.GeneratorTypeSSH,
-							ValueType: model.ValueTypeFingerprint,
-						},
 					},
 				},
 			},
@@ -720,17 +716,15 @@ func TestGenerateSecret(t *testing.T) {
 		}
 
 		assert.Empty(t, secrets.Data["ssh-key"])
+		assert.Empty(t, secrets.Data["ssh-key"+model.FingerprintSuffix])
 		assert.Empty(t, secrets.Data["ssh-key"+generatorSuffix])
-		assert.Empty(t, secrets.Data["ssh-key-fingerprint"])
-		assert.Empty(t, secrets.Data["ssh-key-fingerprint"+generatorSuffix])
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
+		assert.NotEmpty(t, secrets.Data["ssh-key"+model.FingerprintSuffix])
 		assert.NotEmpty(t, secrets.Data["ssh-key"+generatorSuffix])
-		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
-		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"+generatorSuffix])
 	})
 
 	t.Run("Existing SSH key isn't updated", func(t *testing.T) {
@@ -739,26 +733,11 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ssh-key",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "ssh-key",
-							Type:      model.GeneratorTypeSSH,
-							ValueType: model.ValueTypePrivateKey,
-						},
-					},
-					{
-						Name:   "ssh-key-fingerprint",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "ssh-key",
-							Type:      model.GeneratorTypeSSH,
-							ValueType: model.ValueTypeFingerprint,
-						},
-					},
+			Variables: model.Variables{
+				{
+					Name:      "ssh-key",
+					Type:      model.VariableTypeSSH,
+					CVOptions: model.CVOptions{Secret: true},
 				},
 			},
 		}
@@ -771,15 +750,19 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[0], "key")
-		setSecret(secrets, manifest.Configuration.Variables[1], "fingerprint")
+		setSecret(secrets, manifest.Variables[0], "key")
+		setSecretFingerprint(secrets, manifest.Variables[0], "fingerprint")
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
-		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key-fingerprint"])
+		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key"+model.FingerprintSuffix])
 	})
+}
+
+func TestGenerateSSLSecret(t *testing.T) {
+	t.Parallel()
 
 	t.Run("New SSL CA is generated", func(t *testing.T) {
 		t.Parallel()
@@ -787,25 +770,15 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ca-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+			Variables: model.Variables{
+				{
+					Name: "ca-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"is_ca": true,
 					},
-					{
-						Name:   "ca-key",
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
 					},
 				},
 			},
@@ -821,16 +794,14 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.Empty(t, secrets.Data["ca-cert"])
 		assert.Empty(t, secrets.Data["ca-cert"+generatorSuffix])
-		assert.Empty(t, secrets.Data["ca-key"])
-		assert.Empty(t, secrets.Data["ca-key"+generatorSuffix])
+		assert.Empty(t, secrets.Data["ca-cert.key"])
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
 		assert.NotEmpty(t, secrets.Data["ca-cert"+generatorSuffix])
-		assert.NotEmpty(t, secrets.Data["ca-key"])
-		assert.NotEmpty(t, secrets.Data["ca-key"+generatorSuffix])
+		assert.NotEmpty(t, secrets.Data["ca-cert.key"])
 	})
 
 	t.Run("Existing SSL CA isn't updated", func(t *testing.T) {
@@ -839,25 +810,15 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ca-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+			Variables: model.Variables{
+				{
+					Name: "ca-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"is_ca": true,
 					},
-					{
-						Name:   "ca-key",
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
 					},
 				},
 			},
@@ -871,14 +832,14 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[0], "cert")
-		setSecret(secrets, manifest.Configuration.Variables[1], "key")
+		setSecret(secrets, manifest.Variables[0], "cert")
+		setSecretKey(secrets, manifest.Variables[0], "key")
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
-		assert.Equal(t, []byte("key"), secrets.Data["ca-key"])
+		assert.Equal(t, []byte("key"), secrets.Data["ca-cert.key"])
 	})
 
 	t.Run("New SSL cert is generated", func(t *testing.T) {
@@ -887,43 +848,25 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ca-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+			Variables: model.Variables{
+				{
+					Name: "ca-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"is_ca": true,
 					},
-					{
-						Name:   "ca-key",
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
 					},
-					{
-						Name:   "ssl-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+				},
+				{
+					Name: "ssl-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"ca": "ca-cert",
 					},
-					{
-						Name:   "ssl-key",
+					CVOptions: model.CVOptions{
 						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
 					},
 				},
 			},
@@ -939,16 +882,14 @@ func TestGenerateSecret(t *testing.T) {
 
 		assert.Empty(t, secrets.Data["ssl-cert"])
 		assert.Empty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.Empty(t, secrets.Data["ssl-key"])
-		assert.Empty(t, secrets.Data["ssl-key"+generatorSuffix])
+		assert.Empty(t, secrets.Data["ssl-cert.key"])
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.NotEmpty(t, secrets.Data["ssl-key"])
-		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorSuffix])
+		assert.NotEmpty(t, secrets.Data["ssl-cert.key"])
 	})
 
 	t.Run("Existing SSL cert isn't updated", func(t *testing.T) {
@@ -957,44 +898,22 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ca-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+			Variables: model.Variables{
+				{
+					Name: "ca-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"is_ca": true,
 					},
-					{
-						Name:   "ca-key",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
+					CVOptions: model.CVOptions{Secret: true},
+				},
+				{
+					Name: "ssl-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"ca": "ca-cert",
 					},
-					{
-						Name:   "ssl-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
-					},
-					{
-						Name:   "ssl-key",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
-					},
+					CVOptions: model.CVOptions{Secret: true},
 				},
 			},
 		}
@@ -1007,14 +926,14 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
-		setSecret(secrets, manifest.Configuration.Variables[3], "key")
+		setSecret(secrets, manifest.Variables[1], "cert-data")
+		setSecretKey(secrets, manifest.Variables[1], "key-data")
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
-		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
-		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
+		assert.Equal(t, []byte("cert-data"), secrets.Data["ssl-cert"])
+		assert.Equal(t, []byte("key-data"), secrets.Data["ssl-cert.key"])
 	})
 
 	t.Run("Existing SSL cert is updated when SubjectNames change", func(t *testing.T) {
@@ -1023,63 +942,30 @@ func TestGenerateSecret(t *testing.T) {
 		sg := testingSecretGenerator()
 
 		manifest := model.Manifest{
-			Configuration: &model.Configuration{
-				Variables: []*model.ConfigurationVariable{
-					{
-						Name:   "ca-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
+			Variables: model.Variables{
+				{
+					Name: "ca-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"is_ca": true,
 					},
-					{
-						Name:   "ca-key",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "cacert",
-							Type:      model.GeneratorTypeCACertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
+					CVOptions: model.CVOptions{Secret: true},
+				},
+				{
+					Name: "ssl-cert",
+					Type: model.VariableTypeCertificate,
+					Options: model.VariableOptions{
+						"ca": "ca-cert",
 					},
-					{
-						Name:   "ssl-cert",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
-					},
-					{
-						Name:   "ssl-key",
-						Secret: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "sslcert",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
-					},
-					{
-						Name:      "immutable-cert",
+					CVOptions: model.CVOptions{Secret: true},
+				},
+				{
+					Name:    "immutable-cert",
+					Type:    model.VariableTypeCertificate,
+					Options: model.VariableOptions{},
+					CVOptions: model.CVOptions{
 						Secret:    true,
 						Immutable: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "immutable",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypeCertificate,
-						},
-					},
-					{
-						Name:      "immutable-key",
-						Secret:    true,
-						Immutable: true,
-						Generator: &model.ConfigurationVariableGenerator{
-							ID:        "immutable",
-							Type:      model.GeneratorTypeCertificate,
-							ValueType: model.ValueTypePrivateKey,
-						},
 					},
 				},
 			},
@@ -1093,36 +979,32 @@ func TestGenerateSecret(t *testing.T) {
 			},
 		}
 
-		setSecret(secrets, manifest.Configuration.Variables[2], "cert")
-		setSecret(secrets, manifest.Configuration.Variables[3], "key")
-		setSecret(secrets, manifest.Configuration.Variables[4], "cert2")
-		setSecret(secrets, manifest.Configuration.Variables[5], "key2")
+		setSecret(secrets, manifest.Variables[1], "cert")
+		setSecretKey(secrets, manifest.Variables[1], "key")
+		setSecret(secrets, manifest.Variables[2], "cert2")
+		setSecretKey(secrets, manifest.Variables[2], "key2")
 
-		manifest.Configuration.Variables[2].Generator.SubjectNames = []string{"*.domain"}
-		manifest.Configuration.Variables[4].Generator.SubjectNames = []string{"*.domain"}
+		manifest.Variables[1].Options["alternative_names"] = []string{"*.domain"}
+		manifest.Variables[2].Options["alternative_names"] = []string{"*.domain"}
 
 		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
+		assert.Equal(t, []byte("key"), secrets.Data["ssl-cert.key"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.NotContains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "subject_names")
-
-		assert.Equal(t, []byte("key"), secrets.Data["ssl-key"])
-		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorSuffix])
+		assert.NotContains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "alternative_names")
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert.key"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.Contains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "subject_names")
-
-		assert.NotEmpty(t, secrets.Data["ssl-key"])
-		assert.NotEmpty(t, secrets.Data["ssl-key"+generatorSuffix])
+		assert.Contains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "alternative_names")
 
 		assert.NotEqual(t, []byte("cert"), secrets.Data["ssl-cert"])
-		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-key"])
+		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-cert.key"])
 
 		assert.Equal(t, []byte("cert2"), secrets.Data["immutable-cert"])
-		assert.Equal(t, []byte("key2"), secrets.Data["immutable-key"])
+		assert.Equal(t, []byte("key2"), secrets.Data["immutable-cert.key"])
 	})
 }
 
@@ -1134,7 +1016,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		configVar := &model.ConfigurationVariable{
+		configVar := &model.VariableDefinition{
 			Name: "NEW_NAME",
 		}
 
@@ -1152,9 +1034,11 @@ func TestMigrateRenamedVariable(t *testing.T) {
 				"previous-name": []byte(""),
 			},
 		}
-		configVar := &model.ConfigurationVariable{
-			Name:          "NEW_NAME",
-			PreviousNames: []string{"PREVIOUS_NAME"},
+		configVar := &model.VariableDefinition{
+			Name: "NEW_NAME",
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{"PREVIOUS_NAME"},
+			},
 		}
 
 		migrateRenamedVariable(secrets, configVar)
@@ -1172,9 +1056,11 @@ func TestMigrateRenamedVariable(t *testing.T) {
 				"previous-name" + generatorSuffix: []byte("generator1"),
 			},
 		}
-		configVar := &model.ConfigurationVariable{
-			Name:          "NEW_NAME",
-			PreviousNames: []string{"PREVIOUS_NAME"},
+		configVar := &model.VariableDefinition{
+			Name: "NEW_NAME",
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{"PREVIOUS_NAME"},
+			},
 		}
 
 		migrateRenamedVariable(secrets, configVar)
@@ -1182,6 +1068,54 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
 			"If `name` has a previous name, then it should copy the previous value")
 		assert.Equal(t, "generator1", string(secrets.Data["new-name"+generatorSuffix]))
+	})
+
+	t.Run("Previous name with value and dependent SSL key", func(t *testing.T) {
+		t.Parallel()
+
+		secrets := &v1.Secret{
+			Data: map[string][]byte{
+				"previous-name":                   []byte("value1"),
+				"previous-name" + model.KeySuffix: []byte("key-data"),
+			},
+		}
+		configVar := &model.VariableDefinition{
+			Name: "NEW_NAME",
+			Type: model.VariableTypeCertificate,
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{"PREVIOUS_NAME"},
+			},
+		}
+
+		migrateRenamedVariable(secrets, configVar)
+
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
+			"If `name` has a previous name, then it should copy the previous value")
+		assert.Equal(t, "key-data", string(secrets.Data["new-name"+model.KeySuffix]))
+	})
+
+	t.Run("Previous name with value and dependent SSH fingerprint", func(t *testing.T) {
+		t.Parallel()
+
+		secrets := &v1.Secret{
+			Data: map[string][]byte{
+				"previous-name":                           []byte("value1"),
+				"previous-name" + model.FingerprintSuffix: []byte("fingerprint-data"),
+			},
+		}
+		configVar := &model.VariableDefinition{
+			Name: "NEW_NAME",
+			Type: model.VariableTypeSSH,
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{"PREVIOUS_NAME"},
+			},
+		}
+
+		migrateRenamedVariable(secrets, configVar)
+
+		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
+			"If `name` has a previous name, then it should copy the previous value")
+		assert.Equal(t, "fingerprint-data", string(secrets.Data["new-name"+model.FingerprintSuffix]))
 	})
 
 	t.Run("New value already exists", func(t *testing.T) {
@@ -1194,9 +1128,11 @@ func TestMigrateRenamedVariable(t *testing.T) {
 				"new-name":                        []byte("value2"),
 			},
 		}
-		configVar := &model.ConfigurationVariable{
-			Name:          "NEW_NAME",
-			PreviousNames: []string{"PREVIOUS_NAME"},
+		configVar := &model.VariableDefinition{
+			Name: "NEW_NAME",
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{"PREVIOUS_NAME"},
+			},
 		}
 
 		migrateRenamedVariable(secrets, configVar)
@@ -1217,11 +1153,13 @@ func TestMigrateRenamedVariable(t *testing.T) {
 				"previous-previous-name" + generatorSuffix: []byte("generator2"),
 			},
 		}
-		configVar := &model.ConfigurationVariable{
+		configVar := &model.VariableDefinition{
 			Name: "NEW_NAME",
-			PreviousNames: []string{
-				"PREVIOUS_NAME",
-				"PREVIOUS_PREVIOUS_NAME",
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{
+					"PREVIOUS_NAME",
+					"PREVIOUS_PREVIOUS_NAME",
+				},
 			},
 		}
 
@@ -1241,11 +1179,13 @@ func TestMigrateRenamedVariable(t *testing.T) {
 				"previous-previous-name" + generatorSuffix: []byte("generator2"),
 			},
 		}
-		configVar := &model.ConfigurationVariable{
+		configVar := &model.VariableDefinition{
 			Name: "NEW_NAME",
-			PreviousNames: []string{
-				"PREVIOUS_NAME",
-				"PREVIOUS_PREVIOUS_NAME",
+			CVOptions: model.CVOptions{
+				PreviousNames: []string{
+					"PREVIOUS_NAME",
+					"PREVIOUS_PREVIOUS_NAME",
+				},
 			},
 		}
 
