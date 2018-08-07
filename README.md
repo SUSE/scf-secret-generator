@@ -34,6 +34,6 @@ base64 decoded before using.
 ## Building
 
 A modern Go version is required. The version used in SCF is described in the
-[package spec](https://github.com/SUSE/scf/blob/develop/src/scf-helper-release/packages/generate-secrets/spec).
+[package spec](https://github.com/SUSE/scf-helper-release/blob/master/packages/generate-secrets/spec).
 
 `go build` will create the binary.
