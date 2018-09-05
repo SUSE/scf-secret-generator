@@ -126,12 +126,12 @@ func setSecret(secrets *v1.Secret, configVar *model.VariableDefinition, value st
 }
 
 func setSecretKey(secrets *v1.Secret, configVar *model.VariableDefinition, value string) {
-	name := util.ConvertNameToKey(configVar.Name) + model.KeySuffix
+	name := util.ConvertNameToKey(configVar.Name + model.KeySuffix)
 	secrets.Data[name] = []byte(value)
 }
 
 func setSecretFingerprint(secrets *v1.Secret, configVar *model.VariableDefinition, value string) {
-	name := util.ConvertNameToKey(configVar.Name) + model.FingerprintSuffix
+	name := util.ConvertNameToKey(configVar.Name + model.FingerprintSuffix)
 	secrets.Data[name] = []byte(value)
 }
 
@@ -723,7 +723,7 @@ func TestGenerateSSHSecret(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
-		assert.NotEmpty(t, secrets.Data["ssh-key"+model.FingerprintSuffix])
+		assert.NotEmpty(t, secrets.Data["ssh-key-fingerprint"])
 		assert.NotEmpty(t, secrets.Data["ssh-key"+generatorSuffix])
 	})
 
@@ -757,7 +757,7 @@ func TestGenerateSSHSecret(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
-		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key"+model.FingerprintSuffix])
+		assert.Equal(t, []byte("fingerprint"), secrets.Data["ssh-key-fingerprint"])
 	})
 }
 
@@ -794,14 +794,14 @@ func TestGenerateSSLSecret(t *testing.T) {
 
 		assert.Empty(t, secrets.Data["ca-cert"])
 		assert.Empty(t, secrets.Data["ca-cert"+generatorSuffix])
-		assert.Empty(t, secrets.Data["ca-cert.key"])
+		assert.Empty(t, secrets.Data["ca-cert-key"])
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
 		assert.NotEmpty(t, secrets.Data["ca-cert"+generatorSuffix])
-		assert.NotEmpty(t, secrets.Data["ca-cert.key"])
+		assert.NotEmpty(t, secrets.Data["ca-cert-key"])
 	})
 
 	t.Run("Existing SSL CA isn't updated", func(t *testing.T) {
@@ -839,7 +839,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
-		assert.Equal(t, []byte("key"), secrets.Data["ca-cert.key"])
+		assert.Equal(t, []byte("key"), secrets.Data["ca-cert-key"])
 	})
 
 	t.Run("New SSL cert is generated", func(t *testing.T) {
@@ -882,14 +882,14 @@ func TestGenerateSSLSecret(t *testing.T) {
 
 		assert.Empty(t, secrets.Data["ssl-cert"])
 		assert.Empty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.Empty(t, secrets.Data["ssl-cert.key"])
+		assert.Empty(t, secrets.Data["ssl-cert-key"])
 
 		err := sg.generateSecret(manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
-		assert.NotEmpty(t, secrets.Data["ssl-cert.key"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert-key"])
 	})
 
 	t.Run("Existing SSL cert isn't updated", func(t *testing.T) {
@@ -933,7 +933,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("cert-data"), secrets.Data["ssl-cert"])
-		assert.Equal(t, []byte("key-data"), secrets.Data["ssl-cert.key"])
+		assert.Equal(t, []byte("key-data"), secrets.Data["ssl-cert-key"])
 	})
 
 	t.Run("Existing SSL cert is updated when SubjectNames change", func(t *testing.T) {
@@ -988,7 +988,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		manifest.Variables[2].Options["alternative_names"] = []string{"*.domain"}
 
 		assert.Equal(t, []byte("cert"), secrets.Data["ssl-cert"])
-		assert.Equal(t, []byte("key"), secrets.Data["ssl-cert.key"])
+		assert.Equal(t, []byte("key"), secrets.Data["ssl-cert-key"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.NotContains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "alternative_names")
 
@@ -996,15 +996,15 @@ func TestGenerateSSLSecret(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
-		assert.NotEmpty(t, secrets.Data["ssl-cert.key"])
+		assert.NotEmpty(t, secrets.Data["ssl-cert-key"])
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.Contains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "alternative_names")
 
 		assert.NotEqual(t, []byte("cert"), secrets.Data["ssl-cert"])
-		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-cert.key"])
+		assert.NotEqual(t, []byte("key"), secrets.Data["ssl-cert-key"])
 
 		assert.Equal(t, []byte("cert2"), secrets.Data["immutable-cert"])
-		assert.Equal(t, []byte("key2"), secrets.Data["immutable-cert.key"])
+		assert.Equal(t, []byte("key2"), secrets.Data["immutable-cert-key"])
 	})
 }
 
@@ -1070,28 +1070,25 @@ func TestMigrateRenamedVariable(t *testing.T) {
 		assert.Equal(t, "generator1", string(secrets.Data["new-name"+generatorSuffix]))
 	})
 
-	t.Run("Previous name with value and dependent SSL key", func(t *testing.T) {
+	t.Run("Previous name of a dependent variable is migrated", func(t *testing.T) {
 		t.Parallel()
 
 		secrets := &v1.Secret{
 			Data: map[string][]byte{
-				"previous-name":                   []byte("value1"),
-				"previous-name" + model.KeySuffix: []byte("key-data"),
+				"previous-name-key": []byte("key-data"),
 			},
 		}
 		configVar := &model.VariableDefinition{
-			Name: "NEW_NAME",
+			Name: "NEW_NAME_KEY",
 			Type: model.VariableTypeCertificate,
 			CVOptions: model.CVOptions{
-				PreviousNames: []string{"PREVIOUS_NAME"},
+				PreviousNames: []string{"PREVIOUS_NAME_KEY"},
 			},
 		}
 
 		migrateRenamedVariable(secrets, configVar)
 
-		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
-			"If `name` has a previous name, then it should copy the previous value")
-		assert.Equal(t, "key-data", string(secrets.Data["new-name"+model.KeySuffix]))
+		assert.Equal(t, "key-data", string(secrets.Data["new-name-key"]))
 	})
 
 	t.Run("Previous name with value and dependent SSH fingerprint", func(t *testing.T) {
@@ -1099,8 +1096,7 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		secrets := &v1.Secret{
 			Data: map[string][]byte{
-				"previous-name":                           []byte("value1"),
-				"previous-name" + model.FingerprintSuffix: []byte("fingerprint-data"),
+				"previous-name": []byte("value1"),
 			},
 		}
 		configVar := &model.VariableDefinition{
@@ -1115,7 +1111,6 @@ func TestMigrateRenamedVariable(t *testing.T) {
 
 		assert.Equal(t, "value1", string(secrets.Data["new-name"]),
 			"If `name` has a previous name, then it should copy the previous value")
-		assert.Equal(t, "fingerprint-data", string(secrets.Data["new-name"+model.FingerprintSuffix]))
 	})
 
 	t.Run("New value already exists", func(t *testing.T) {

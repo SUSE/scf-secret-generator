@@ -300,7 +300,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 			immutable[name] = configVar.CVOptions.Immutable
 		}
 		for name := range secrets.Data {
-			if !immutable[name] && independentName(name) {
+			if !immutable[name] && independentSecret(name) {
 				log.Printf("  Resetting `%s`\n", name)
 				delete(secrets.Data, name)
 				delete(secrets.Data, name+generatorSuffix)
@@ -391,23 +391,27 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 func (sg *SecretGenerator) removeUnsusedSecrets(manifest model.Manifest, secrets *v1.Secret) {
 	generatedSecret := make(map[string]bool)
 	for _, configVar := range manifest.Variables {
-		generatedSecret[util.ConvertNameToKey(configVar.Name)] = configVar.CVOptions.Secret && configVar.Type != model.EmptyType
+		generatedSecret[util.ConvertNameToKey(configVar.Name)] = isGenerated(*configVar)
 	}
 	for name := range secrets.Data {
-		if !generatedSecret[name] && independentName(name) {
+		if !generatedSecret[name] && independentSecret(name) {
 			log.Printf("  Removing `%s`\n", name)
 			delete(secrets.Data, name)
 			delete(secrets.Data, name+generatorSuffix)
-			delete(secrets.Data, name+model.KeySuffix)
-			delete(secrets.Data, name+model.FingerprintSuffix)
+			delete(secrets.Data, name+util.ConvertNameToKey(model.KeySuffix))
+			delete(secrets.Data, name+util.ConvertNameToKey(model.FingerprintSuffix))
 		}
 	}
 }
 
-func independentName(name string) bool {
+func isGenerated(v model.VariableDefinition) bool {
+	return v.CVOptions.Secret && v.Type != model.EmptyType
+}
+
+func independentSecret(name string) bool {
 	return !strings.HasSuffix(name, generatorSuffix) &&
-		!strings.HasSuffix(name, model.KeySuffix) &&
-		!strings.HasSuffix(name, model.FingerprintSuffix)
+		!strings.HasSuffix(name, util.ConvertNameToKey(model.KeySuffix)) &&
+		!strings.HasSuffix(name, util.ConvertNameToKey(model.FingerprintSuffix))
 }
 
 // rollbackSecret switches back to previous secret (and makes the current secret the new previous one).
@@ -466,11 +470,6 @@ func migrateRenamedVariable(secrets *v1.Secret, configVar *model.VariableDefinit
 			if len(previousValue) > 0 {
 				secrets.Data[name] = previousValue
 				secrets.Data[name+generatorSuffix] = secrets.Data[previousName+generatorSuffix]
-				if configVar.Type == model.VariableTypeCertificate {
-					migrateCertificateVariable(secrets, name, previousName)
-				} else if configVar.Type == model.VariableTypeSSH {
-					migrateSSHVariable(secrets, name, previousName)
-				}
 				return
 			}
 		}

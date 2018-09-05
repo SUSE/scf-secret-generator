@@ -22,10 +22,10 @@ const (
 )
 
 // KeySuffix is appended to the name of certificate variables private key secret
-const KeySuffix = ".key"
+const KeySuffix = "_KEY"
 
 // FingerprintSuffix is appended to the name of SSH variables fingerprint secret
-const FingerprintSuffix = ".fingerprint"
+const FingerprintSuffix = "_FINGERPRINT"
 
 // Manifest is the top level of the role manifest file
 // Variables contains information about how to configure the
