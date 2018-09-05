@@ -8,102 +8,154 @@ import (
 	yaml "gopkg.in/yaml.v2"
 )
 
-// GeneratorType describes the type of generator used for the configuration value
-type GeneratorType string
+// VariableType describes the BOSH type of the variable,
+// as defined in https://bosh.io/docs/manifest-v2/#variables
+type VariableType string
 
-// These are the available generator types for configuration values
+// These are the supported variable types for configuration values
+// An EmptyType will be ignored by variable generation.
 const (
-	GeneratorTypePassword      = GeneratorType("Password")      // Password
-	GeneratorTypeSSH           = GeneratorType("SSH")           // SSH key
-	GeneratorTypeCACertificate = GeneratorType("CACertificate") // CA Certificate
-	GeneratorTypeCertificate   = GeneratorType("Certificate")   // Certificate
+	EmptyType               = VariableType("") // type is required
+	VariableTypeCertificate = VariableType("certificate")
+	VariableTypeSSH         = VariableType("ssh")
+	VariableTypePassword    = VariableType("password")
 )
 
-// ValueType describes the type of generator used for the configuration value
-type ValueType string
+// KeySuffix is appended to the name of certificate variables private key secret
+const KeySuffix = ".key"
 
-// These are the available generator types for configuration values
-const (
-	ValueTypeCertificate = ValueType("certificate")
-	ValueTypeFingerprint = ValueType("fingerprint")
-	ValueTypePrivateKey  = ValueType("private_key")
-)
-
-// ConfigurationVariableGenerator describes how to automatically generate values
-// for a configuration variable
-// WARNING: Avoid re-ordering the fields; that would trigger secrets re-generation because
-// it changes the serialized generator input strings. For the same reason additional fields
-// should be added with the omitempty attribute.
-type ConfigurationVariableGenerator struct {
-	ID           string        `json:"id,omitempty" yaml:"id,omitempty"`
-	Type         GeneratorType `json:"type" yaml:"type"`
-	ValueType    ValueType     `json:"value_type,omitempty" yaml:"value_type,omitempty"`
-	SubjectNames []string      `json:"subject_names,omitempty" yaml:"subject_names,omitempty"`
-	RoleName     string        `json:"role_name,omitempty" yaml:"role_name,omitempty"`
-}
-
-// ConfigurationVariable is a configuration to be exposed to the IaaS
-//
-// Notes on the fields Type and Internal.
-// 1. Type's legal values are `user` and `environment`.
-//    `user` is default.
-//
-//    A `user` CV is rendered into k8s yml config files, etc. to make it available to roles who need it.
-//    - An internal CV is rendered to all roles.
-//    - A public CV is rendered only to the roles whose templates refer to the CV.
-//
-//    An `environment` CV comes from a script, not the user. Being
-//    internal this way it is not rendered to any configuration files.
-//
-// 2. Internal's legal values are all YAML boolean values.
-//    A public CV is used in templates
-//    An internal CV is not, consumed in a script instead.
-type ConfigurationVariable struct {
-	Name          string                          `yaml:"name"`
-	PreviousNames []string                        `yaml:"previous_names"`
-	Default       interface{}                     `yaml:"default"`
-	Description   string                          `yaml:"description"`
-	Example       string                          `yaml:"example"`
-	Generator     *ConfigurationVariableGenerator `yaml:"generator"`
-	Type          CVType                          `yaml:"type"`
-	Internal      bool                            `yaml:"internal,omitempty"`
-	Secret        bool                            `yaml:"secret,omitempty"`
-	Required      bool                            `yaml:"required,omitempty"`
-	Immutable     bool                            `yaml:"immutable,omitempty"`
-}
-
-// CVType is the type of the configuration variable; see the constants below
-type CVType string
-
-const (
-	// CVTypeUser is for user-specified variables (default)
-	CVTypeUser = CVType("user")
-	// CVTypeEnv is for script-specified variables
-	CVTypeEnv = CVType("environment")
-)
-
-// Configuration contains information about how to configure the
-// resulting images
-type Configuration struct {
-	Variables []*ConfigurationVariable `yaml:"variables"`
-}
+// FingerprintSuffix is appended to the name of SSH variables fingerprint secret
+const FingerprintSuffix = ".fingerprint"
 
 // Manifest is the top level of the role manifest file
+// Variables contains information about how to configure the
+// resulting images
 type Manifest struct {
-	Configuration *Configuration `yaml:"configuration"`
+	Variables Variables `yaml:"variables"`
+}
+
+// Variables from the BOSH manifests variables section
+type Variables []*VariableDefinition
+
+// VariableDefinition is a configuration to be exposed to the IaaS
+//
+// Type is the type of a variable.
+// Options are free form as defined in https://bosh.io/docs/manifest-v2/#variables
+// CVOptions are additional options, mostly used to control the generated k8s secrets
+type VariableDefinition struct {
+	Name      string          `yaml:"name"`
+	Type      VariableType    `json:"type" yaml:"type"`
+	Options   VariableOptions `yaml:"options"`
+	CVOptions CVOptions
+}
+
+// VariableOptions are not structured, their content depends on the type
+type VariableOptions map[string]interface{}
+
+// CVOptions are custom options, mostly used to control the generated k8s secrets
+type CVOptions struct {
+	PreviousNames []string `yaml:"previous_names"`
+	Secret        bool     `yaml:"secret,omitempty"`
+	Immutable     bool     `yaml:"immutable,omitempty"`
+	RoleName      string   `json:"role_name,omitempty" yaml:"role_name,omitempty"`
+}
+
+// Internal structure for extracting our CVOptions into a struct
+type internalConfigurationVariable struct {
+	CVOptions CVOptions `yaml:"options"`
+}
+
+// Since we want all keys below options: but still need access to a number of fissile special
+// options.
+type internalVariableDefinitions struct {
+	Variables []*internalConfigurationVariable `yaml:"variables"`
+}
+
+// CertParams was copied from config-server/types/certificate_generator.go for on the fly parsing of certificate options
+type CertParams struct {
+	CommonName       string   `yaml:"common_name"`
+	AlternativeNames []string `yaml:"alternative_names" json:"subject_names,omitempty"`
+	IsCA             bool     `yaml:"is_ca"`
+	CAName           string   `yaml:"ca"`
+	ExtKeyUsage      []string `yaml:"extended_key_usage"`
 }
 
 // GetManifest loads a manifest from file or string
 func GetManifest(r io.Reader) (Manifest, error) {
-	data, err := ioutil.ReadAll(r)
-
 	var manifest Manifest
-	if err == nil {
-		err = yaml.Unmarshal(data, &manifest)
-		if err == nil && manifest.Configuration == nil {
-			err = errors.New("'configuration section' not found in manifest")
+
+	data, err := ioutil.ReadAll(r)
+	if err != nil {
+		return manifest, err
+	}
+
+	err = yaml.Unmarshal(data, &manifest)
+	if err != nil {
+		return manifest, err
+	}
+
+	if err == nil && manifest.Variables == nil {
+		return manifest, errors.New("'Variables section' not found in manifest")
+	}
+
+	seen := make(map[string]bool)
+	for _, v := range manifest.Variables {
+		if seen[v.Name] {
+			return manifest, errors.New("Duplicate variable name found in manifest")
 		}
+		seen[v.Name] = true
+	}
+
+	// clean up, since we parse these into CVOptions
+	for _, v := range manifest.Variables {
+		delete(v.Options, "previous_names")
+		delete(v.Options, "generator")
+		delete(v.Options, "secret")
+		delete(v.Options, "immutable")
+		delete(v.Options, "role_name")
+	}
+
+	var definitions internalVariableDefinitions
+	err = yaml.Unmarshal(data, &definitions)
+	if err != nil {
+		return manifest, err
+	}
+
+	for i, v := range definitions.Variables {
+		manifest.Variables[i].CVOptions = v.CVOptions
 	}
 
 	return manifest, err
+}
+
+// OptionsAsCertificateParams returns the variables options as a struct of certificate parameters
+func (cv *VariableDefinition) OptionsAsCertificateParams() (CertParams, error) {
+	params := CertParams{}
+	valBytes, err := yaml.Marshal(cv.Options)
+	if err != nil {
+		return params, err
+	}
+
+	err = yaml.Unmarshal(valBytes, &params)
+	if err != nil {
+		return params, err
+	}
+
+	return params, nil
+}
+
+// SetOptions updates the variables options from the certificate parameters
+func (cv *VariableDefinition) SetOptions(params interface{}) error {
+	str, err := yaml.Marshal(params)
+	if err != nil {
+		return err
+	}
+
+	options := VariableOptions{}
+	err = yaml.Unmarshal(str, &options)
+	if err != nil {
+		return err
+	}
+	cv.Options = options
+	return nil
 }

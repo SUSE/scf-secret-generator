@@ -25,6 +25,7 @@ type CertInfo struct {
 	PrivateKeyName  string // Name to associate with private key
 	CertificateName string // Name to associate with certificate
 	IsAuthority     bool
+	CAName          string
 
 	SubjectNames []string
 	RoleName     string
@@ -34,56 +35,44 @@ type CertInfo struct {
 }
 
 // RecordCertInfo record cert information for later generation
-func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.ConfigurationVariable) error {
-	if len(configVar.Generator.ID) == 0 {
-		return fmt.Errorf("Config variable `%s` has no ID value", configVar.Name)
-	}
-	if configVar.Generator.Type != model.GeneratorTypeCACertificate && configVar.Generator.Type != model.GeneratorTypeCertificate {
-		return fmt.Errorf("Config variable `%s` does not have a valid SSL generator type", configVar.Name)
+func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.VariableDefinition) error {
+	params, err := configVar.OptionsAsCertificateParams()
+	if err != nil {
+		return fmt.Errorf("Config variable `%s` has invalid certificate options", configVar.Name)
 	}
 
-	info := certInfo[configVar.Generator.ID]
+	// We will use the configVar.Name of CAs as reference in certs though
+	// variable names are unique, so we get a fresh CertInfo{}
+	info := certInfo[configVar.Name]
 
-	isAuthority := (configVar.Generator.Type == model.GeneratorTypeCACertificate)
-	if (len(info.CertificateName) > 0 || len(info.PrivateKeyName) > 0) && isAuthority != info.IsAuthority {
-		return fmt.Errorf("Inconsistent cert type (CA vs non-CA) between Cert and Key vars for id `%s`", configVar.Generator.ID)
-	}
-	info.IsAuthority = isAuthority
+	// Previously key and ID had the same Generator.ID, now they're not separate entries
+	info.CertificateName = util.ConvertNameToKey(configVar.Name)
+	info.PrivateKeyName = util.ConvertNameToKey(configVar.Name) + model.KeySuffix
 
-	switch configVar.Generator.ValueType {
-	case model.ValueTypeCertificate:
-		if len(info.CertificateName) > 0 {
-			return fmt.Errorf("Multiple variables define certificate name for SSL id `%s`", configVar.Generator.ID)
+	info.IsAuthority = params.IsCA
+
+	if len(params.CAName) > 0 {
+		if params.IsCA {
+			return fmt.Errorf("CA for SSL id `%s` should not have a CA", configVar.Name)
 		}
-		info.CertificateName = util.ConvertNameToKey(configVar.Name)
-	case model.ValueTypePrivateKey:
-		if len(info.PrivateKeyName) > 0 {
-			return fmt.Errorf("Multiple variables define private key name for SSL id `%s`", configVar.Generator.ID)
-		}
-		info.PrivateKeyName = util.ConvertNameToKey(configVar.Name)
-	default:
-		return fmt.Errorf("Config variable `%s` has invalid value type `%s`", configVar.Name, configVar.Generator.ValueType)
+		info.CAName = params.CAName
 	}
 
-	if len(configVar.Generator.SubjectNames) > 0 {
-		if configVar.Generator.Type == model.GeneratorTypeCACertificate {
-			return fmt.Errorf("CA Cert or key for SSL id `%s` should not have subject names", configVar.Generator.ID)
+	if len(params.AlternativeNames) > 0 {
+		if params.IsCA {
+			return fmt.Errorf("CA Cert for SSL id `%s` should not have subject names", configVar.Name)
 		}
-		if configVar.Generator.ValueType == model.ValueTypePrivateKey {
-			return fmt.Errorf("Private key for SSL id `%s` should not have subject names", configVar.Generator.ID)
-		}
-		info.SubjectNames = configVar.Generator.SubjectNames
+		info.SubjectNames = params.AlternativeNames
 	}
-	if configVar.Generator.RoleName != "" {
-		if configVar.Generator.Type == model.GeneratorTypeCACertificate {
-			return fmt.Errorf("CA Cert or key for SSL id `%s` should not have a role name", configVar.Generator.ID)
+
+	if configVar.CVOptions.RoleName != "" {
+		if params.IsCA {
+			return fmt.Errorf("CA Cert for SSL id `%s` should not have a role name", configVar.Name)
 		}
-		if configVar.Generator.ValueType == model.ValueTypePrivateKey {
-			return fmt.Errorf("Private key for SSL id `%s` should not have a role name", configVar.Generator.ID)
-		}
-		info.RoleName = configVar.Generator.RoleName
+		info.RoleName = configVar.CVOptions.RoleName
 	}
-	certInfo[configVar.Generator.ID] = info
+
+	certInfo[configVar.Name] = info
 	return nil
 }
 
@@ -166,10 +155,14 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 		return nil
 	}
 
-	// XXX Add support for multiple CAs
-	caInfo := certInfo[defaultCA]
+	caName := defaultCA
+	if info.CAName != "" {
+		caName = info.CAName
+	}
+
+	caInfo := certInfo[caName]
 	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
-		return fmt.Errorf("CA %s not found", defaultCA)
+		return fmt.Errorf("CA %s not found", caName)
 	}
 
 	req := &csr.CertificateRequest{KeyRequest: rsaKeyRequest()}

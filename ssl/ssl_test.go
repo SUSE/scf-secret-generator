@@ -24,19 +24,15 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
+		configVar := &model.VariableDefinition{
+			Name:      certID,
+			Type:      model.VariableTypeCertificate,
+			CVOptions: model.CVOptions{Secret: true},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
 		require.NoError(t, err)
-		assert.Equal(t, "cert-name", certInfo[certID].CertificateName)
+		assert.Equal(t, "cert-id", certInfo[certID].CertificateName)
 	})
 
 	t.Run("Private key should be added to certInfo", func(t *testing.T) {
@@ -44,19 +40,15 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "PRIVATE_KEY_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypePrivateKey,
-				ID:        certID,
-			},
+		configVar := &model.VariableDefinition{
+			Name:      certID,
+			Type:      model.VariableTypeCertificate,
+			CVOptions: model.CVOptions{Secret: true},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
 		require.NoError(t, err)
-		assert.Equal(t, "private-key-name", certInfo[certID].PrivateKeyName)
+		assert.Equal(t, "cert-id.key", certInfo[certID].PrivateKeyName)
 	})
 
 	t.Run("Private key and cert should be in the same mapped value", func(t *testing.T) {
@@ -64,33 +56,18 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
+		configVar := &model.VariableDefinition{
+			Name:      certID,
+			Type:      model.VariableTypeCertificate,
+			CVOptions: model.CVOptions{Secret: true},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
 		require.NoError(t, err)
 
-		configVar = &model.ConfigurationVariable{
-			Name:   "PRIVATE_KEY_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypePrivateKey,
-				ID:        certID,
-			},
-		}
-		err = RecordCertInfo(certInfo, configVar)
-
 		require.NoError(t, err)
-		assert.Equal(t, "cert-name", certInfo[certID].CertificateName)
-		assert.Equal(t, "private-key-name", certInfo[certID].PrivateKeyName)
+		assert.Equal(t, "cert-id", certInfo[certID].CertificateName)
+		assert.Equal(t, "cert-id.key", certInfo[certID].PrivateKeyName)
 	})
 
 	t.Run("SubjectNames are added to certInfo", func(t *testing.T) {
@@ -98,15 +75,13 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:         model.GeneratorTypeCertificate,
-				ValueType:    model.ValueTypeCertificate,
-				SubjectNames: []string{"subject names"},
-				ID:           certID,
+		configVar := &model.VariableDefinition{
+			Name: certID,
+			Type: model.VariableTypeCertificate,
+			Options: model.VariableOptions{
+				"alternative_names": []string{"subject names"},
 			},
+			CVOptions: model.CVOptions{Secret: true},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
@@ -119,14 +94,12 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				RoleName:  "role name",
-				ID:        certID,
+		configVar := &model.VariableDefinition{
+			Name: certID,
+			Type: model.VariableTypeCertificate,
+			CVOptions: model.CVOptions{
+				Secret:   true,
+				RoleName: "role name",
 			},
 		}
 		err := RecordCertInfo(certInfo, configVar)
@@ -135,216 +108,23 @@ func TestRecordCertInfo(t *testing.T) {
 		assert.Equal(t, "role name", certInfo[certID].RoleName)
 	})
 
-	t.Run("Generator has no ID", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Config variable `CERT_NAME` has no ID value")
-	})
-
-	t.Run("Generator has wrong Type", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypePassword,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Config variable `CERT_NAME` does not have a valid SSL generator type")
-	})
-
-	t.Run("Generator has wrong Value Type", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: "undefined",
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Config variable `CERT_NAME` has invalid value type `undefined`")
-	})
-
-	t.Run("Key and cert should use the same cert type", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		require.NoError(t, err)
-
-		configVar = &model.ConfigurationVariable{
-			Name:   "PRIVATE_KEY_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCACertificate,
-				ValueType: model.ValueTypePrivateKey,
-				ID:        certID,
-			},
-		}
-		err = RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Inconsistent cert type (CA vs non-CA) between Cert and Key vars for id `cert-id`")
-	})
-
-	t.Run("Certificate has multiple definitions", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME1",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		require.NoError(t, err)
-
-		configVar = &model.ConfigurationVariable{
-			Name:   "CERT_NAME2",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypeCertificate,
-				ID:        certID,
-			},
-		}
-		err = RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Multiple variables define certificate name for SSL id `cert-id`")
-	})
-
-	t.Run("Private key has multiple definitions", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "PRIVATE_KEY_NAME1",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypePrivateKey,
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		require.NoError(t, err)
-
-		configVar = &model.ConfigurationVariable{
-			Name:   "PRIVATE_KEY_NAME2",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypePrivateKey,
-				ID:        certID,
-			},
-		}
-		err = RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Multiple variables define private key name for SSL id `cert-id`")
-	})
-
 	t.Run("SubjectNames not allowed on CA certs", func(t *testing.T) {
 		t.Parallel()
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:         model.GeneratorTypeCACertificate,
-				ValueType:    model.ValueTypeCertificate,
-				SubjectNames: []string{"subject names"},
-				ID:           certID,
+		configVar := &model.VariableDefinition{
+			Name: "CERT_NAME",
+			Type: model.VariableTypeCertificate,
+			Options: model.VariableOptions{
+				"is_ca":             true,
+				"alternative_names": []string{"subject names"},
 			},
+			CVOptions: model.CVOptions{Secret: true},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
-		assert.EqualError(t, err, "CA Cert or key for SSL id `cert-id` should not have subject names")
-	})
-
-	t.Run("SubjectNames not allowed on CA keys", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:         model.GeneratorTypeCACertificate,
-				ValueType:    model.ValueTypePrivateKey,
-				SubjectNames: []string{"subject names"},
-				ID:           certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "CA Cert or key for SSL id `cert-id` should not have subject names")
-	})
-
-	t.Run("SubjectNames not allowed on keys", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:         model.GeneratorTypeCertificate,
-				ValueType:    model.ValueTypePrivateKey,
-				SubjectNames: []string{"subject names"},
-				ID:           certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Private key for SSL id `cert-id` should not have subject names")
+		assert.EqualError(t, err, "CA Cert for SSL id `CERT_NAME` should not have subject names")
 	})
 
 	t.Run("Role name not allowed on CA certs", func(t *testing.T) {
@@ -352,60 +132,22 @@ func TestRecordCertInfo(t *testing.T) {
 
 		certInfo := make(map[string]CertInfo)
 
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCACertificate,
-				ValueType: model.ValueTypeCertificate,
-				RoleName:  "role name",
-				ID:        certID,
+		configVar := &model.VariableDefinition{
+			Name: "CERT_NAME",
+			Type: model.VariableTypeCertificate,
+			Options: model.VariableOptions{
+				"is_ca": true,
+			},
+			CVOptions: model.CVOptions{
+				Secret:   true,
+				RoleName: "role name",
 			},
 		}
 		err := RecordCertInfo(certInfo, configVar)
 
-		assert.EqualError(t, err, "CA Cert or key for SSL id `cert-id` should not have a role name")
+		assert.EqualError(t, err, "CA Cert for SSL id `CERT_NAME` should not have a role name")
 	})
 
-	t.Run("Role name not allowed on CA keys", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCACertificate,
-				ValueType: model.ValueTypePrivateKey,
-				RoleName:  "role name",
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "CA Cert or key for SSL id `cert-id` should not have a role name")
-	})
-
-	t.Run("Role name not allowed on keys", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-
-		configVar := &model.ConfigurationVariable{
-			Name:   "CERT_NAME",
-			Secret: true,
-			Generator: &model.ConfigurationVariableGenerator{
-				Type:      model.GeneratorTypeCertificate,
-				ValueType: model.ValueTypePrivateKey,
-				RoleName:  "role name",
-				ID:        certID,
-			},
-		}
-		err := RecordCertInfo(certInfo, configVar)
-
-		assert.EqualError(t, err, "Private key for SSL id `cert-id` should not have a role name")
-	})
 }
 
 func TestGenerateCerts(t *testing.T) {

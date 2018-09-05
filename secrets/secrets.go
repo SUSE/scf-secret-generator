@@ -235,29 +235,54 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 }
 
 func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
+	for _, configVar := range manifest.Variables {
+		if configVar.Type != model.VariableTypeCertificate {
+			continue
+		}
+
+		params, err := configVar.OptionsAsCertificateParams()
+		if err != nil {
+			return fmt.Errorf("Can't parse certificate config variable `%s`: %s", configVar.Name, err)
+		}
+
+		buf, err := sg.expandDomainName(configVar.Name, params.CommonName)
+		if err != nil {
+			return err
+		}
+		params.CommonName = buf
+
+		for index, name := range params.AlternativeNames {
+			buf, err := sg.expandDomainName(configVar.Name, name)
+			if err != nil {
+				return err
+			}
+			params.AlternativeNames[index] = buf
+		}
+
+		err = configVar.SetOptions(params)
+		if err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+func (sg *SecretGenerator) expandDomainName(configVarName string, name string) (string, error) {
 	mapping := map[string]string{
 		"DOMAIN":                    sg.Domain,
 		"KUBERNETES_CLUSTER_DOMAIN": sg.ClusterDomain,
 		"KUBERNETES_NAMESPACE":      sg.Namespace,
 	}
-	for _, configVar := range manifest.Configuration.Variables {
-		if configVar.Generator == nil {
-			continue
-		}
-		for index, name := range configVar.Generator.SubjectNames {
-			t, err := template.New("").Parse(name)
-			if err != nil {
-				return fmt.Errorf("Can't parse subject name `%s` for config variable `%s`: %s", name, configVar.Name, err)
-			}
-			buf := &bytes.Buffer{}
-			err = t.Execute(buf, mapping)
-			if err != nil {
-				return err
-			}
-			configVar.Generator.SubjectNames[index] = buf.String()
-		}
+	t, err := template.New("").Parse(name)
+	if err != nil {
+		return "", fmt.Errorf("Can't parse subject name `%s` for config variable `%s`: %s", name, configVarName, err)
 	}
-	return nil
+	buf := &bytes.Buffer{}
+	err = t.Execute(buf, mapping)
+	if err != nil {
+		return "", err
+	}
+	return buf.String(), nil
 }
 
 // generateSecret will generate all secrets defined in the manifest that don't already exist
@@ -270,12 +295,12 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		}
 
 		immutable := make(map[string]bool)
-		for _, configVar := range manifest.Configuration.Variables {
+		for _, configVar := range manifest.Variables {
 			name := util.ConvertNameToKey(configVar.Name)
-			immutable[name] = configVar.Immutable
+			immutable[name] = configVar.CVOptions.Immutable
 		}
 		for name := range secrets.Data {
-			if !immutable[name] && !strings.HasSuffix(name, generatorSuffix) {
+			if !immutable[name] && independentName(name) {
 				log.Printf("  Resetting `%s`\n", name)
 				delete(secrets.Data, name)
 				delete(secrets.Data, name+generatorSuffix)
@@ -289,16 +314,16 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	log.Println("Generate Passwords ...")
 
-	for _, configVar := range manifest.Configuration.Variables {
-		if !configVar.Secret || configVar.Generator == nil {
+	for _, configVar := range manifest.Variables {
+		if !configVar.CVOptions.Secret || configVar.Type == model.EmptyType {
 			continue
 		}
 		migrateRenamedVariable(secrets, configVar)
 
-		// create normalized representation of generator input parameters. SubjectName templates
+		// create normalized representation of the variable. SubjectName templates
 		// are already expanded; JSON marshaller sorts mapping keys and emits struct fields in
 		// the same order as they are defined in the source code.
-		generatorInput, err := json.Marshal(configVar.Generator)
+		generatorInput, err := json.Marshal(configVar)
 		if err != nil {
 			return fmt.Errorf("Can't convert `%s` generator config into JSON: %s", configVar.Name, err)
 		}
@@ -306,11 +331,11 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 		name := util.ConvertNameToKey(configVar.Name)
 		// if secret exists and generator input has changed, then the secret needs to be regenerated
 		if len(secrets.Data[name]) > 0 && !bytes.Equal(secrets.Data[name+generatorSuffix], generatorInput) {
-			if configVar.Immutable {
+			if configVar.CVOptions.Immutable {
 				// don't warn if the immutable value has been inherited by upgrade from
 				// an earlier release that didn't store the generatorInput
 				if len(secrets.Data[name+generatorSuffix]) > 0 {
-					log.Printf("Warning: Generator options for `%s` have changed, but variable is immutable\n", configVar.Name)
+					log.Printf("Warning: definition of `%s` has changed, but variable is immutable\n", configVar.Name)
 				}
 			} else {
 				log.Printf("Variable `%s` must be regenerated because the generator options have changed\n", configVar.Name)
@@ -321,24 +346,24 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 			secrets.Data[name+generatorSuffix] = generatorInput
 		}
 
-		switch configVar.Generator.Type {
-		case model.GeneratorTypePassword:
+		switch configVar.Type {
+		case model.VariableTypePassword:
 			password.GeneratePassword(secrets, configVar.Name)
 
-		case model.GeneratorTypeCACertificate, model.GeneratorTypeCertificate:
+		case model.VariableTypeCertificate:
 			err := ssl.RecordCertInfo(certInfo, configVar)
 			if err != nil {
 				return err
 			}
 
-		case model.GeneratorTypeSSH:
+		case model.VariableTypeSSH:
 			err := ssh.RecordKeyInfo(sshKeys, configVar)
 			if err != nil {
 				return err
 			}
 
 		default:
-			log.Printf("Warning: variable `%s` has unknown generator type `%s`\n", configVar.Name, configVar.Generator.Type)
+			log.Printf("Warning: variable `%s` has unknown generator type `%s`\n", configVar.Name, configVar.Type)
 		}
 	}
 
@@ -356,21 +381,33 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 
 	if !sg.IsInstall {
 		log.Println("Removing secrets that are no longer being used")
-		generatedSecret := make(map[string]bool)
-		for _, configVar := range manifest.Configuration.Variables {
-			generatedSecret[util.ConvertNameToKey(configVar.Name)] = configVar.Secret && configVar.Generator != nil
-		}
-		for name := range secrets.Data {
-			if !generatedSecret[name] && !strings.HasSuffix(name, generatorSuffix) {
-				log.Printf("  Removing `%s`\n", name)
-				delete(secrets.Data, name)
-				delete(secrets.Data, name+generatorSuffix)
-			}
-		}
+		sg.removeUnsusedSecrets(manifest, secrets)
 	}
 
 	log.Println("Done with generation")
 	return nil
+}
+
+func (sg *SecretGenerator) removeUnsusedSecrets(manifest model.Manifest, secrets *v1.Secret) {
+	generatedSecret := make(map[string]bool)
+	for _, configVar := range manifest.Variables {
+		generatedSecret[util.ConvertNameToKey(configVar.Name)] = configVar.CVOptions.Secret && configVar.Type != model.EmptyType
+	}
+	for name := range secrets.Data {
+		if !generatedSecret[name] && independentName(name) {
+			log.Printf("  Removing `%s`\n", name)
+			delete(secrets.Data, name)
+			delete(secrets.Data, name+generatorSuffix)
+			delete(secrets.Data, name+model.KeySuffix)
+			delete(secrets.Data, name+model.FingerprintSuffix)
+		}
+	}
+}
+
+func independentName(name string) bool {
+	return !strings.HasSuffix(name, generatorSuffix) &&
+		!strings.HasSuffix(name, model.KeySuffix) &&
+		!strings.HasSuffix(name, model.FingerprintSuffix)
 }
 
 // rollbackSecret switches back to previous secret (and makes the current secret the new previous one).
@@ -420,17 +457,40 @@ func (sg *SecretGenerator) updateSecret(s secretInterface, secrets *v1.Secret, c
 	return nil
 }
 
-func migrateRenamedVariable(secrets *v1.Secret, configVar *model.ConfigurationVariable) {
+func migrateRenamedVariable(secrets *v1.Secret, configVar *model.VariableDefinition) {
 	name := util.ConvertNameToKey(configVar.Name)
 	if len(secrets.Data[name]) == 0 {
-		for _, previous := range configVar.PreviousNames {
+		for _, previous := range configVar.CVOptions.PreviousNames {
 			previousName := util.ConvertNameToKey(previous)
 			previousValue := secrets.Data[previousName]
 			if len(previousValue) > 0 {
 				secrets.Data[name] = previousValue
 				secrets.Data[name+generatorSuffix] = secrets.Data[previousName+generatorSuffix]
+				if configVar.Type == model.VariableTypeCertificate {
+					migrateCertificateVariable(secrets, name, previousName)
+				} else if configVar.Type == model.VariableTypeSSH {
+					migrateSSHVariable(secrets, name, previousName)
+				}
 				return
 			}
 		}
+	}
+}
+
+func migrateCertificateVariable(secrets *v1.Secret, name string, previousName string) {
+	previousName = previousName + model.KeySuffix
+	name = name + model.KeySuffix
+	previousValue := secrets.Data[previousName]
+	if len(previousValue) > 0 {
+		secrets.Data[name] = secrets.Data[previousName]
+	}
+}
+
+func migrateSSHVariable(secrets *v1.Secret, name string, previousName string) {
+	previousName = previousName + model.FingerprintSuffix
+	name = name + model.FingerprintSuffix
+	previousValue := secrets.Data[previousName]
+	if len(previousValue) > 0 {
+		secrets.Data[name] = secrets.Data[previousName]
 	}
 }

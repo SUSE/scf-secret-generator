@@ -22,34 +22,19 @@ type Key struct {
 }
 
 // RecordKeyInfo records priave key or fingerprint names for later generation
-func RecordKeyInfo(keys map[string]Key, configVar *model.ConfigurationVariable) error {
-	if len(configVar.Generator.ID) == 0 {
-		return fmt.Errorf("Config variable `%s` has no ID value", configVar.Name)
-	}
-	if configVar.Generator.Type != model.GeneratorTypeSSH {
+func RecordKeyInfo(keys map[string]Key, configVar *model.VariableDefinition) error {
+	if configVar.Type != model.VariableTypeSSH {
 		return fmt.Errorf("Config variable `%s` does not have a valid SSH generator type", configVar.Name)
 	}
 
 	// Get or create the key from the map, there should always be
 	// a pair of private keys and fingerprints
-	key := keys[configVar.Generator.ID]
+	key := keys[configVar.Name]
 
-	switch configVar.Generator.ValueType {
-	case model.ValueTypeFingerprint:
-		if len(key.Fingerprint) > 0 {
-			return fmt.Errorf("Multiple variables define fingerprints name for SSH id `%s`", configVar.Generator.ID)
-		}
-		key.Fingerprint = configVar.Name
-	case model.ValueTypePrivateKey:
-		if len(key.PrivateKey) > 0 {
-			return fmt.Errorf("Multiple variables define private key name for SSH id `%s`", configVar.Generator.ID)
-		}
-		key.PrivateKey = configVar.Name
-	default:
-		return fmt.Errorf("Config variable `%s` has invalid value type `%s`", configVar.Name, configVar.Generator.ValueType)
-	}
+	key.Fingerprint = configVar.Name + model.FingerprintSuffix
+	key.PrivateKey = configVar.Name
 
-	keys[configVar.Generator.ID] = key
+	keys[configVar.Name] = key
 	return nil
 }
 

@@ -12,178 +12,22 @@ import (
 func TestRecordKeyInfo(t *testing.T) {
 	t.Parallel()
 
-	t.Run("Recording fingerprint creates key", func(t *testing.T) {
+	t.Run("Fingerprint and private key are recorded", func(t *testing.T) {
 		t.Parallel()
 
 		keys := make(map[string]Key)
 
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypeFingerprint,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		require.NoError(t, err)
-		assert.Equal(t, "FINGERPRINT_NAME", keys["foo"].Fingerprint)
-	})
-
-	t.Run("Recording private key creates key", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "PRIVATE_KEY_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypePrivateKey,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		require.NoError(t, err)
-		assert.Equal(t, "PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
-	})
-
-	t.Run("Fingerprint and private key are stored in the same record", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypeFingerprint,
+		configVar := &model.VariableDefinition{
+			Name: "foo",
+			Type: model.VariableTypeSSH,
 		}
 
 		err := RecordKeyInfo(keys, configVar)
 
 		require.NoError(t, err)
 
-		configVar.Name = "PRIVATE_KEY_NAME"
-		configVar.Generator.ValueType = model.ValueTypePrivateKey
-
-		err = RecordKeyInfo(keys, configVar)
-
-		require.NoError(t, err)
-		assert.Equal(t, "FINGERPRINT_NAME", keys["foo"].Fingerprint)
-		assert.Equal(t, "PRIVATE_KEY_NAME", keys["foo"].PrivateKey)
-	})
-
-	t.Run("Generator has no ID", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypeFingerprint,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		assert.EqualError(t, err, "Config variable `FINGERPRINT_NAME` has no ID value")
-	})
-
-	t.Run("Generator has invalid type", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypePassword,
-			ValueType: model.ValueTypeFingerprint,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		assert.EqualError(t, err, "Config variable `FINGERPRINT_NAME` does not have a valid SSH generator type")
-	})
-
-	t.Run("Generator has invalid value type", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: "unknown",
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		assert.EqualError(t, err, "Config variable `FINGERPRINT_NAME` has invalid value type `unknown`")
-	})
-
-	t.Run("Fingerprint has multiple definitions", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "FINGERPRINT_NAME1",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypeFingerprint,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		require.NoError(t, err)
-
-		configVar.Name = "FINGERPRINT_NAME2"
-
-		err = RecordKeyInfo(keys, configVar)
-
-		assert.EqualError(t, err, "Multiple variables define fingerprints name for SSH id `foo`")
-	})
-
-	t.Run("Private key has multiple definitions", func(t *testing.T) {
-		t.Parallel()
-
-		keys := make(map[string]Key)
-
-		configVar := &model.ConfigurationVariable{
-			Name: "PRIVATE_KEY_NAME1",
-		}
-		configVar.Generator = &model.ConfigurationVariableGenerator{
-			ID:        "foo",
-			Type:      model.GeneratorTypeSSH,
-			ValueType: model.ValueTypePrivateKey,
-		}
-
-		err := RecordKeyInfo(keys, configVar)
-
-		require.NoError(t, err)
-
-		configVar.Name = "PRIVATE_KEY_NAME2"
-
-		err = RecordKeyInfo(keys, configVar)
-
-		assert.EqualError(t, err, "Multiple variables define private key name for SSH id `foo`")
+		assert.Equal(t, "foo.fingerprint", keys["foo"].Fingerprint)
+		assert.Equal(t, "foo", keys["foo"].PrivateKey)
 	})
 }
 
