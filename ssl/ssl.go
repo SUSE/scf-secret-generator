@@ -47,7 +47,7 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.VariableDefin
 
 	// Previously key and ID had the same Generator.ID, now they're not separate entries
 	info.CertificateName = util.ConvertNameToKey(configVar.Name)
-	info.PrivateKeyName = util.ConvertNameToKey(configVar.Name) + model.KeySuffix
+	info.PrivateKeyName = util.ConvertNameToKey(configVar.Name + model.KeySuffix)
 
 	info.IsAuthority = params.IsCA
 

@@ -48,7 +48,7 @@ func TestRecordCertInfo(t *testing.T) {
 		err := RecordCertInfo(certInfo, configVar)
 
 		require.NoError(t, err)
-		assert.Equal(t, "cert-id.key", certInfo[certID].PrivateKeyName)
+		assert.Equal(t, "cert-id-key", certInfo[certID].PrivateKeyName)
 	})
 
 	t.Run("Private key and cert should be in the same mapped value", func(t *testing.T) {
@@ -67,7 +67,7 @@ func TestRecordCertInfo(t *testing.T) {
 
 		require.NoError(t, err)
 		assert.Equal(t, "cert-id", certInfo[certID].CertificateName)
-		assert.Equal(t, "cert-id.key", certInfo[certID].PrivateKeyName)
+		assert.Equal(t, "cert-id-key", certInfo[certID].PrivateKeyName)
 	})
 
 	t.Run("SubjectNames are added to certInfo", func(t *testing.T) {

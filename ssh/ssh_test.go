@@ -26,7 +26,7 @@ func TestRecordKeyInfo(t *testing.T) {
 
 		require.NoError(t, err)
 
-		assert.Equal(t, "foo.fingerprint", keys["foo"].Fingerprint)
+		assert.Equal(t, "foo_FINGERPRINT", keys["foo"].Fingerprint)
 		assert.Equal(t, "foo", keys["foo"].PrivateKey)
 	})
 }
