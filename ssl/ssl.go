@@ -131,6 +131,13 @@ func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string, expir
 		return fmt.Errorf("Cannot create CA: %s", err)
 	}
 
+	if len(info.PrivateKeyName) == 0 {
+		return fmt.Errorf("Cannot create CA for %s, if key name is empty", id)
+	}
+	if len(info.CertificateName) == 0 {
+		return fmt.Errorf("Cannot create CA for %s, if certificate name is empty", id)
+	}
+
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 
