@@ -274,6 +274,21 @@ func TestCreateCA(t *testing.T) {
 		assert.NotEqual(t, secrets.Data[certInfo[certID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[certID].CertificateName], []byte{})
 	})
+
+	t.Run("createCA should error when PrivateKeyName field is empty", func(t *testing.T) {
+		t.Parallel()
+
+		certInfo := make(map[string]CertInfo)
+		certInfo[certID] = CertInfo{
+			PrivateKeyName:  "",
+			CertificateName: "certificate-name",
+		}
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+
+		err := createCA(certInfo, secrets, certID, 365)
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "Cannot create CA for")
+	})
 }
 
 func TestAddHost(t *testing.T) {
@@ -306,6 +321,10 @@ func TestCreateCert(t *testing.T) {
 
 	// Initialize a default CA for later use
 	defaultCertInfo := make(map[string]CertInfo)
+
+	// Make sure PrivateKeyName & CertificateName are populated when calling createCA()
+	defaultCertInfo[defaultCA] = CertInfo{PrivateKeyName: "private-key", CertificateName: "certificate-name"}
+
 	secrets := &v1.Secret{Data: map[string][]byte{}}
 	createCA(defaultCertInfo, secrets, defaultCA, 365)
 
