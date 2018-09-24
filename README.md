@@ -5,9 +5,8 @@ secrets based on the [role manifest](https://github.com/SUSE/scf/blob/develop/co
 
 It works in conjunction with the [fissile](https://github.com/SUSE/fissile) project.
 
-These secrets are described in the `configuration.variables` section, and will
-be generated if they have `secret: true` properties and the `generator` section
-is populated.
+These secrets are described in the `variables` section, and will
+be generated if they have `secret: true` properties and non-empty `type` properties.
 
 It can generate:
 
