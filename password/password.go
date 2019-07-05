@@ -5,7 +5,8 @@ import (
 
 	"github.com/SUSE/scf-secret-generator/util"
 	"github.com/dchest/uniuri"
-	"k8s.io/api/core/v1"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 // GeneratePassword generates a password for `secretName` if it doesn't already exist

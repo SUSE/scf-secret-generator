@@ -9,7 +9,7 @@ import (
 	"log"
 
 	"golang.org/x/crypto/ssh"
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/SUSE/scf-secret-generator/util"
