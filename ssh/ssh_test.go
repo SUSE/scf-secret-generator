@@ -6,7 +6,8 @@ import (
 	"github.com/SUSE/scf-secret-generator/model"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"k8s.io/api/core/v1"
+
+	v1 "k8s.io/api/core/v1"
 )
 
 func TestRecordKeyInfo(t *testing.T) {

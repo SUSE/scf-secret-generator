@@ -228,6 +228,48 @@ func TestGenerateCerts(t *testing.T) {
 		assert.NotEmpty(t, cert.DNSNames, "Normal cert should include some DNS names")
 	})
 
+	t.Run("If secrets already has a private key, do nothing", func(t *testing.T) {
+		t.Parallel()
+
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		secrets.Data["private-key"] = []byte("private-key-data")
+		secrets.Data["certificate-name"] = []byte("certificate-data")
+
+		certInfo := make(map[string]CertInfo)
+		createCA(certInfo, secrets, defaultCA, 365)
+		certInfo[certID] = CertInfo{
+			PrivateKeyName:  "private-key",
+			CertificateName: "certificate-name",
+		}
+
+		err := GenerateCerts(certInfo, "namespace", "cluster.domain", 365, secrets)
+
+		assert.NoError(t, err)
+		assert.Equal(t, []byte("private-key-data"), secrets.Data["private-key"])
+		assert.Equal(t, []byte("certificate-data"), secrets.Data["certificate-name"])
+	})
+
+	t.Run("secrets.Data should have a private key and a certificate", func(t *testing.T) {
+		t.Parallel()
+
+		certInfo := make(map[string]CertInfo)
+		secrets := &v1.Secret{Data: map[string][]byte{}}
+		createCA(certInfo, secrets, defaultCA, 365)
+		certInfo[certID] = CertInfo{
+			PrivateKeyName:  "private-key",
+			CertificateName: "certificate-name",
+			SubjectNames:    []string{"subject-names"},
+		}
+
+		err := GenerateCerts(certInfo, "namespace", "cluster.domain", 365, secrets)
+		require.NoError(t, err, "Error creating certificate")
+
+		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
+		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
+		_, err = tls.X509KeyPair(secrets.Data[certInfo[certID].CertificateName], secrets.Data[certInfo[certID].PrivateKeyName])
+		assert.NoError(t, err)
+	})
+
 }
 
 func TestRsaKeyRequest(t *testing.T) {
@@ -309,27 +351,6 @@ func TestCreateCert(t *testing.T) {
 	secrets := &v1.Secret{Data: map[string][]byte{}}
 	createCA(defaultCertInfo, secrets, defaultCA, 365)
 
-	t.Run("If secrets already has a private key, do nothing", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-		certInfo[defaultCA] = defaultCertInfo[defaultCA]
-		certInfo[certID] = CertInfo{
-			PrivateKeyName:  "private-key",
-			CertificateName: "certificate-name",
-		}
-
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-		secrets.Data["private-key"] = []byte("private-key-data")
-		secrets.Data["certificate-name"] = []byte("certificate-data")
-
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
-
-		assert.NoError(t, err)
-		assert.Equal(t, []byte("private-key-data"), secrets.Data["private-key"])
-		assert.Equal(t, []byte("certificate-data"), secrets.Data["certificate-name"])
-	})
-
 	t.Run("If the default CA private key isn't found, return an error", func(t *testing.T) {
 		t.Parallel()
 
@@ -339,9 +360,10 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
+		newCert, err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
 
 		assert.EqualError(t, err, "CA "+defaultCA+" not found")
+		assert.Nil(t, newCert, "New cert generated even with error")
 	})
 
 	t.Run("If the default CA certificate isn't found, return an error", func(t *testing.T) {
@@ -353,9 +375,10 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
+		newCert, err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
 
 		assert.EqualError(t, err, "CA "+defaultCA+" not found")
+		assert.Nil(t, newCert, "New cert generated even with error")
 	})
 
 	t.Run("If CA cert fails to parse, it should return an error", func(t *testing.T) {
@@ -374,10 +397,11 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
-		require.Error(t, err)
+		newCert, err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
+		require.Error(t, err, "Expected CA parsing to fail")
 
 		assert.Contains(t, err.Error(), "Cannot parse CA cert")
+		assert.Nil(t, newCert, "New cert generated even with error")
 	})
 
 	t.Run("If CA private key fails to parse, it should return an error", func(t *testing.T) {
@@ -396,31 +420,11 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
-		require.Error(t, err)
+		newCert, err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
+		require.Error(t, err, "Expected CA parsing to fail")
 
 		assert.Contains(t, err.Error(), "Cannot parse CA private key")
-	})
-
-	t.Run("secrets.Data should have a private key and a certificate", func(t *testing.T) {
-		t.Parallel()
-
-		certInfo := make(map[string]CertInfo)
-		certInfo[defaultCA] = defaultCertInfo[defaultCA]
-		certInfo[certID] = CertInfo{
-			PrivateKeyName:  "private-key",
-			CertificateName: "certificate-name",
-			SubjectNames:    []string{"subject-names"},
-		}
-		secrets := &v1.Secret{Data: map[string][]byte{}}
-
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
-		require.NoError(t, err)
-
-		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
-		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
-		_, err = tls.X509KeyPair(secrets.Data[certInfo[certID].CertificateName], secrets.Data[certInfo[certID].PrivateKeyName])
-		assert.NoError(t, err)
+		assert.Nil(t, newCert, "New cert generated even with error")
 	})
 
 	t.Run("rolename isn't empty and the env is valid", func(t *testing.T) {
@@ -439,13 +443,13 @@ func TestCreateCert(t *testing.T) {
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
 
-		err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
+		newCert, err := createCert(certInfo, "namespace", "cluster.domain", secrets, certID, 365)
 		require.NoError(t, err)
 
-		assert.NotEmpty(t, secrets.Data[certInfo[certID].PrivateKeyName])
-		assert.NotEmpty(t, secrets.Data[certInfo[certID].CertificateName])
+		assert.NotEmpty(t, newCert.PrivateKey)
+		assert.NotEmpty(t, newCert.Certificate)
 
-		certBlob, _ := pem.Decode(secrets.Data[certInfo[certID].CertificateName])
+		certBlob, _ := pem.Decode(newCert.Certificate)
 		require.NotNil(t, certBlob, "Failed to decode certificate PEM block")
 
 		cert, err := x509.ParseCertificate(certBlob.Bytes)

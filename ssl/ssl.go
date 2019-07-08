@@ -3,6 +3,7 @@ package ssl
 import (
 	"fmt"
 	glog "log"
+	"sync"
 	"time"
 
 	"github.com/SUSE/scf-secret-generator/model"
@@ -15,7 +16,7 @@ import (
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
 
-	"k8s.io/api/core/v1"
+	v1 "k8s.io/api/core/v1"
 )
 
 const defaultCA = "cacert"
@@ -89,6 +90,12 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string
 			return err
 		}
 	}
+
+	wg := sync.WaitGroup{}
+	mut := sync.Mutex{}
+	errs := []error{}
+	newCerts := map[string]*CertInfo{}
+
 	for id, info := range certInfo {
 		if info.IsAuthority {
 			continue
@@ -97,10 +104,44 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string
 		if len(info.SubjectNames) == 0 && info.RoleName == "" {
 			glog.Printf("Warning: certificate %s has no names\n", info.CertificateName)
 		}
-		err := createCert(certInfo, namespace, clusterDomain, secrets, id, expiration)
-		if err != nil {
-			return err
-		}
+
+		wg.Add(1)
+		go func(id string, info CertInfo) {
+			defer wg.Done()
+			// Just one of the fields may be deleted by changes to the generator input.
+			// Need to generate a new cert if either is missing.
+			mut.Lock()
+			if len(secrets.Data[info.PrivateKeyName]) > 0 && len(secrets.Data[info.CertificateName]) > 0 {
+				mut.Unlock()
+				return
+			}
+			mut.Unlock()
+
+			newCert, err := createCert(certInfo, namespace, clusterDomain, secrets, id, expiration)
+			mut.Lock()
+			defer mut.Unlock()
+			if err != nil {
+				errs = append(errs, err)
+			} else {
+				if newCert == nil {
+					panic("createCert returned no errors, but no certificate either")
+				}
+				secrets.Data[newCert.PrivateKeyName] = newCert.PrivateKey
+				secrets.Data[newCert.CertificateName] = newCert.Certificate
+				// We stash the new certificate in a secondary map so that we
+				// can freely read `certInfo` in `createCert()`` (to look up the
+				// CA needed to generate other certificates) without triggering
+				// data races.
+				newCerts[id] = newCert
+			}
+		}(id, info)
+	}
+	wg.Wait()
+	if len(errs) > 0 {
+		return errs[0]
+	}
+	for id, newCert := range newCerts {
+		certInfo[id] = *newCert
 	}
 	return nil
 }
@@ -145,15 +186,13 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 	}
 }
 
-func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, secrets *v1.Secret, id string, expiration int) error {
+// createCert generates a new certificate (for the given id).  Note that this
+// returns the new certificate, rather than modifying it in-place, in order to
+// make it possible for various certificates to be generated in parallel.  This
+// is useful as key generation can be slow.
+func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, secrets *v1.Secret, id string, expiration int) (*CertInfo, error) {
 	var err error
 	info := certInfo[id]
-
-	// Just one of the fields may be deleted by changes to the generator input.
-	// Need to generate a new cert if either is missing.
-	if len(secrets.Data[info.PrivateKeyName]) > 0 && len(secrets.Data[info.CertificateName]) > 0 {
-		return nil
-	}
 
 	caName := defaultCA
 	if info.CAName != "" {
@@ -162,7 +201,7 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 
 	caInfo := certInfo[caName]
 	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
-		return fmt.Errorf("CA %s not found", caName)
+		return nil, fmt.Errorf("CA %s not found", caName)
 	}
 
 	req := &csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
@@ -194,16 +233,16 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 	g := &csr.Generator{Validator: genkey.Validator}
 	signingReq, info.PrivateKey, err = g.ProcessRequest(req)
 	if err != nil {
-		return fmt.Errorf("Cannot generate cert: %s", err)
+		return nil, fmt.Errorf("Cannot generate cert: %s", err)
 	}
 
 	caCert, err := helpers.ParseCertificatePEM(caInfo.Certificate)
 	if err != nil {
-		return fmt.Errorf("Cannot parse CA cert: %s", err)
+		return nil, fmt.Errorf("Cannot parse CA cert: %s", err)
 	}
 	caKey, err := helpers.ParsePrivateKeyPEM(caInfo.PrivateKey)
 	if err != nil {
-		return fmt.Errorf("Cannot parse CA private key: %s", err)
+		return nil, fmt.Errorf("Cannot parse CA private key: %s", err)
 	}
 
 	signingProfile := &config.SigningProfile{
@@ -218,29 +257,26 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 
 	s, err := local.NewSigner(caKey, caCert, signer.DefaultSigAlgo(caKey), policy)
 	if err != nil {
-		return fmt.Errorf("Cannot create signer: %s", err)
+		return nil, fmt.Errorf("Cannot create signer: %s", err)
 	}
 
 	info.Certificate, err = s.Sign(signer.SignRequest{Request: string(signingReq)})
 	if err != nil {
-		return fmt.Errorf("Failed to sign cert: %s", err)
+		return nil, fmt.Errorf("Failed to sign cert: %s", err)
 	}
 
 	if len(info.PrivateKeyName) == 0 {
-		return fmt.Errorf("Certificate %s created with empty private key name", id)
+		return nil, fmt.Errorf("Certificate %s created with empty private key name", id)
 	}
 	if len(info.PrivateKey) == 0 {
-		return fmt.Errorf("Certificate %s created with empty private key", id)
+		return nil, fmt.Errorf("Certificate %s created with empty private key", id)
 	}
 	if len(info.CertificateName) == 0 {
-		return fmt.Errorf("Certificate %s created with empty certificate name", id)
+		return nil, fmt.Errorf("Certificate %s created with empty certificate name", id)
 	}
 	if len(info.Certificate) == 0 {
-		return fmt.Errorf("Certificate %s created with empty certificate", id)
+		return nil, fmt.Errorf("Certificate %s created with empty certificate", id)
 	}
-	secrets.Data[info.PrivateKeyName] = info.PrivateKey
-	secrets.Data[info.CertificateName] = info.Certificate
-	certInfo[id] = info
 
-	return nil
+	return &info, nil
 }
