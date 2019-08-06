@@ -466,44 +466,6 @@ func TestGetSecret(t *testing.T) {
 	})
 }
 
-func TestExpandTemplates(t *testing.T) {
-	t.Parallel()
-
-	sg := testingSecretGenerator()
-
-	manifest := model.Manifest{
-		Variables: model.Variables{
-			{
-				Name: "ssl-cert",
-				Type: model.VariableTypeCertificate,
-				Options: model.VariableOptions{
-					"common_name": "foo.{{.KUBERNETES_NAMESPACE}}",
-					"alternative_names": []string{
-						"*.{{.DOMAIN}}",
-						"foo.{{.KUBERNETES_NAMESPACE}}",
-						"svc.{{.KUBERNETES_CLUSTER_DOMAIN}}"},
-				},
-				CVOptions: model.CVOptions{
-					Secret: true,
-				},
-			},
-		},
-	}
-
-	err := sg.expandTemplates(manifest)
-	assert.NoError(t, err)
-
-	params, err := manifest.Variables[0].OptionsAsCertificateParams()
-	assert.NoError(t, err)
-	assert.Equal(t, "foo.namespace", params.CommonName)
-
-	names := params.AlternativeNames
-	assert.Len(t, names, 3)
-	assert.Equal(t, "*.domain", names[0])
-	assert.Equal(t, "foo.namespace", names[1])
-	assert.Equal(t, "svc.cluster.domain", names[2])
-}
-
 func TestGeneratePasswordSecret(t *testing.T) {
 	t.Parallel()
 

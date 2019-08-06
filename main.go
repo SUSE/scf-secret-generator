@@ -5,6 +5,7 @@ import (
 	"fmt"
 	"log"
 	"os"
+	"strings"
 
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
@@ -57,7 +58,26 @@ var secretsName = flag.String(
 	"Secrets Name (version string of the helm chart)",
 )
 
+type envSettings map[string]string
+
+var templateEnv = make(envSettings)
+
+func (env *envSettings) String() string {
+	return ""
+}
+
+func (env *envSettings) Set(value string) error {
+	s := strings.SplitN(value, "=", 2)
+	if len(s) == 2 {
+		(*env)[s[0]] = s[1]
+	} else {
+		(*env)[s[0]] = ""
+	}
+	return nil
+}
+
 func main() {
+	flag.Var(&templateEnv, "set", "Define config variable for template expansion.")
 	flag.Parse()
 
 	if *installMode != "install" && *installMode != "upgrade" {
@@ -74,6 +94,7 @@ func main() {
 		Namespace:         *namespace,
 		SecretsGeneration: *secretsGeneration,
 		SecretsName:       *secretsName,
+		TemplateEnv:       templateEnv,
 	}
 	if sg.Domain == "" {
 		log.Fatal("-domain is not set")
@@ -87,6 +108,10 @@ func main() {
 	if sg.SecretsName == "" {
 		log.Fatal("-secretsName is not set")
 	}
+
+	sg.TemplateEnv["DOMAIN"] = sg.Domain
+	sg.TemplateEnv["KUBERNETES_CLUSTER_DOMAIN"] = sg.ClusterDomain
+	sg.TemplateEnv["KUBERNETES_NAMESPACE"] = sg.Namespace
 
 	file, err := os.Open(flag.Arg(0))
 	if err == nil {

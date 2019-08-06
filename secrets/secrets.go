@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"strings"
@@ -48,6 +47,7 @@ type SecretGenerator struct {
 	SecretsConfigMapName string
 	SecretsGeneration    string
 	SecretsName          string
+	TemplateEnv          map[string]string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -80,11 +80,8 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	manifest, err := model.GetManifest(manifestReader)
-	if err != nil {
-		return err
-	}
-	err = sg.expandTemplates(manifest)
+
+	manifest, err := model.GetManifest(manifestReader, sg.TemplateEnv)
 	if err != nil {
 		return err
 	}
@@ -232,57 +229,6 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 		newSecret.Data = currentSecret.Data
 	}
 	return newSecret, nil
-}
-
-func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
-	for _, configVar := range manifest.Variables {
-		if configVar.Type != model.VariableTypeCertificate {
-			continue
-		}
-
-		params, err := configVar.OptionsAsCertificateParams()
-		if err != nil {
-			return fmt.Errorf("Can't parse certificate config variable `%s`: %s", configVar.Name, err)
-		}
-
-		buf, err := sg.expandDomainName(configVar.Name, params.CommonName)
-		if err != nil {
-			return err
-		}
-		params.CommonName = buf
-
-		for index, name := range params.AlternativeNames {
-			buf, err := sg.expandDomainName(configVar.Name, name)
-			if err != nil {
-				return err
-			}
-			params.AlternativeNames[index] = buf
-		}
-
-		err = configVar.SetOptions(params)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (sg *SecretGenerator) expandDomainName(configVarName string, name string) (string, error) {
-	mapping := map[string]string{
-		"DOMAIN":                    sg.Domain,
-		"KUBERNETES_CLUSTER_DOMAIN": sg.ClusterDomain,
-		"KUBERNETES_NAMESPACE":      sg.Namespace,
-	}
-	t, err := template.New("").Parse(name)
-	if err != nil {
-		return "", fmt.Errorf("Can't parse subject name `%s` for config variable `%s`: %s", name, configVarName, err)
-	}
-	buf := &bytes.Buffer{}
-	err = t.Execute(buf, mapping)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
 }
 
 // generateSecret will generate all secrets defined in the manifest that don't already exist
