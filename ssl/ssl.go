@@ -2,6 +2,7 @@ package ssl
 
 import (
 	"fmt"
+	"io/ioutil"
 	glog "log"
 	"sync"
 	"time"
@@ -26,6 +27,7 @@ type CertInfo struct {
 	PrivateKeyName  string // Name to associate with private key
 	CertificateName string // Name to associate with certificate
 	IsAuthority     bool
+	AppendKubeCA    bool
 	CAName          string
 
 	SubjectNames []string
@@ -51,6 +53,12 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.VariableDefin
 	info.PrivateKeyName = util.ConvertNameToKey(configVar.Name + model.KeySuffix)
 
 	info.IsAuthority = params.IsCA
+	info.AppendKubeCA = params.AppendKubeCA
+
+	if info.AppendKubeCA && !info.IsAuthority {
+		return fmt.Errorf("Can't append kube CA to regular cert id `%s`; only works for CA certs",
+			configVar.Name)
+	}
 
 	if len(params.CAName) > 0 {
 		if params.IsCA {
@@ -175,7 +183,18 @@ func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string, expir
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 
+	if info.AppendKubeCA {
+		glog.Printf("appending kube CA cert to CA cert %s", id)
+
+		kubeCert, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+		if err != nil {
+			return fmt.Errorf("Cannot read kube CA cert: %s", err)
+		}
+		secrets.Data[info.CertificateName] = append(secrets.Data[info.CertificateName], kubeCert...)
+	}
+
 	certInfo[id] = info
+
 	return nil
 }
 

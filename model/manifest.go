@@ -69,6 +69,7 @@ type CVOptions struct {
 type CertParams struct {
 	AlternativeNames []string `yaml:"alternative_names" json:"subject_names,omitempty"`
 	IsCA             bool     `yaml:"is_ca"`
+	AppendKubeCA     bool     `yaml:"append_kube_ca"`
 	CAName           string   `yaml:"ca"`
 	ExtKeyUsage      []string `yaml:"extended_key_usage"`
 }
