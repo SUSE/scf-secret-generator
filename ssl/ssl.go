@@ -17,17 +17,17 @@ import (
 	"github.com/cloudflare/cfssl/signer"
 	"github.com/cloudflare/cfssl/signer/local"
 
+	certificates "k8s.io/api/certificates/v1beta1"
 	v1 "k8s.io/api/core/v1"
+	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 )
-
-const defaultCA = "cacert"
 
 // CertInfo contains all the information required to generate an SSL cert
 type CertInfo struct {
 	PrivateKeyName  string // Name to associate with private key
 	CertificateName string // Name to associate with certificate
 	IsAuthority     bool
-	AppendKubeCA    bool
+	KubeCACertFile  string
 	CAName          string
 
 	SubjectNames []string
@@ -35,6 +35,8 @@ type CertInfo struct {
 
 	Certificate []byte
 	PrivateKey  []byte
+
+	CSRName string // Name of kube csr
 }
 
 // RecordCertInfo record cert information for later generation
@@ -52,12 +54,14 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.VariableDefin
 	info.CertificateName = util.ConvertNameToKey(configVar.Name)
 	info.PrivateKeyName = util.ConvertNameToKey(configVar.Name + model.KeySuffix)
 
-	info.IsAuthority = params.IsCA
-	info.AppendKubeCA = params.AppendKubeCA
-
-	if info.AppendKubeCA && !info.IsAuthority {
+	if params.AppendKubeCA && !params.IsCA {
 		return fmt.Errorf("Can't append kube CA to regular cert id `%s`; only works for CA certs",
 			configVar.Name)
+	}
+
+	info.IsAuthority = params.IsCA
+	if params.AppendKubeCA {
+		info.KubeCACertFile = "/var/run/secrets/kubernetes.io/serviceaccount/ca.crt"
 	}
 
 	if len(params.CAName) > 0 {
@@ -86,7 +90,7 @@ func RecordCertInfo(certInfo map[string]CertInfo, configVar *model.VariableDefin
 }
 
 // GenerateCerts creates an SSL cert and private key
-func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string, expiration int, secrets *v1.Secret) error {
+func GenerateCerts(certInfo map[string]CertInfo, csri util.CertificateSigningRequestInterface, namespace, clusterDomain string, expiration int, autoApproval bool, secrets *v1.Secret) error {
 	// generate all the CAs first because they are needed to sign the certs
 	for id, info := range certInfo {
 		if !info.IsAuthority {
@@ -125,7 +129,7 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string
 			}
 			mut.Unlock()
 
-			newCert, err := createCert(certInfo, namespace, clusterDomain, secrets, id, expiration)
+			newCert, err := createCert(certInfo, csri, namespace, clusterDomain, secrets, id, expiration, autoApproval)
 			mut.Lock()
 			defer mut.Unlock()
 			if err != nil {
@@ -145,13 +149,43 @@ func GenerateCerts(certInfo map[string]CertInfo, namespace, clusterDomain string
 		}(id, info)
 	}
 	wg.Wait()
+
+	var err error
 	if len(errs) > 0 {
-		return errs[0]
+		err = errs[0]
 	}
+
 	for id, newCert := range newCerts {
+		if newCert.CSRName != "" {
+			if err == nil {
+				newCert, err = waitForKubeCSR(csri, *newCert)
+				if err != nil {
+					err = fmt.Errorf("Kube CSR failed with %s", err)
+				}
+				secrets.Data[newCert.PrivateKeyName] = newCert.PrivateKey
+				secrets.Data[newCert.CertificateName] = newCert.Certificate
+			}
+			_ = csri.Delete(newCert.CSRName, &metav1.DeleteOptions{})
+		}
+
+		// Once we hit an error we just delete all still outstanding kube csrs
+		// and then return the first error we encountered.
+		if err != nil {
+			continue
+		}
+
+		if len(newCert.PrivateKeyName) == 0 {
+			err = fmt.Errorf("Certificate %s created with empty private key name", id)
+		} else if len(newCert.PrivateKey) == 0 {
+			err = fmt.Errorf("Certificate %s created with empty private key", id)
+		} else if len(newCert.CertificateName) == 0 {
+			err = fmt.Errorf("Certificate %s created with empty certificate name", id)
+		} else if len(newCert.Certificate) == 0 {
+			err = fmt.Errorf("Certificate %s created with empty certificate", id)
+		}
 		certInfo[id] = *newCert
 	}
-	return nil
+	return err
 }
 
 func rsaKeyRequest() *csr.BasicKeyRequest {
@@ -183,10 +217,10 @@ func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string, expir
 	secrets.Data[info.PrivateKeyName] = info.PrivateKey
 	secrets.Data[info.CertificateName] = info.Certificate
 
-	if info.AppendKubeCA {
-		glog.Printf("appending kube CA cert to CA cert %s", id)
+	if info.KubeCACertFile != "" {
+		glog.Printf("appending kube CA cert from %s to to CA cert %s", info.KubeCACertFile, id)
 
-		kubeCert, err := ioutil.ReadFile("/var/run/secrets/kubernetes.io/serviceaccount/ca.crt")
+		kubeCert, err := ioutil.ReadFile(info.KubeCACertFile)
 		if err != nil {
 			return fmt.Errorf("Cannot read kube CA cert: %s", err)
 		}
@@ -209,19 +243,9 @@ func addHost(req *csr.CertificateRequest, wildcard bool, name string) {
 // returns the new certificate, rather than modifying it in-place, in order to
 // make it possible for various certificates to be generated in parallel.  This
 // is useful as key generation can be slow.
-func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, secrets *v1.Secret, id string, expiration int) (*CertInfo, error) {
+func createCert(certInfo map[string]CertInfo, csri util.CertificateSigningRequestInterface, namespace, clusterDomain string, secrets *v1.Secret, id string, expiration int, autoApproval bool) (*CertInfo, error) {
 	var err error
 	info := certInfo[id]
-
-	caName := defaultCA
-	if info.CAName != "" {
-		caName = info.CAName
-	}
-
-	caInfo := certInfo[caName]
-	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
-		return nil, fmt.Errorf("CA %s not found", caName)
-	}
 
 	req := &csr.CertificateRequest{KeyRequest: rsaKeyRequest()}
 
@@ -252,7 +276,20 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 	g := &csr.Generator{Validator: genkey.Validator}
 	signingReq, info.PrivateKey, err = g.ProcessRequest(req)
 	if err != nil {
-		return nil, fmt.Errorf("Cannot generate cert: %s", err)
+		return nil, fmt.Errorf("Cannot generate csr: %s", err)
+	}
+
+	if info.CAName == "" {
+		info, err := createKubeCSR(csri, signingReq, info, namespace, id, autoApproval)
+		if err == nil && autoApproval {
+			approveKubeCSR(csri, info.CSRName)
+		}
+		return info, err
+	}
+
+	caInfo := certInfo[info.CAName]
+	if len(caInfo.PrivateKey) == 0 || len(caInfo.Certificate) == 0 {
+		return nil, fmt.Errorf("CA %s not found", info.CAName)
 	}
 
 	caCert, err := helpers.ParseCertificatePEM(caInfo.Certificate)
@@ -284,18 +321,80 @@ func createCert(certInfo map[string]CertInfo, namespace, clusterDomain string, s
 		return nil, fmt.Errorf("Failed to sign cert: %s", err)
 	}
 
-	if len(info.PrivateKeyName) == 0 {
-		return nil, fmt.Errorf("Certificate %s created with empty private key name", id)
+	return &info, nil
+}
+func createKubeCSR(csri util.CertificateSigningRequestInterface, request []byte, info CertInfo, namespace, id string, autoApproval bool) (*CertInfo, error) {
+	csr := &certificates.CertificateSigningRequest{
+		ObjectMeta: metav1.ObjectMeta{
+			Name: util.ConvertNameToKey(fmt.Sprintf("%s-%s", namespace, id)),
+		},
+		Spec: certificates.CertificateSigningRequestSpec{
+			Request: request,
+			Usages: []certificates.KeyUsage{
+				certificates.UsageClientAuth,
+				certificates.UsageServerAuth,
+			},
+			// expiration is determined by apiserver and cannot be configured
+		},
 	}
-	if len(info.PrivateKey) == 0 {
-		return nil, fmt.Errorf("Certificate %s created with empty private key", id)
+	glog.Printf("create kube csr %s", csr.Name)
+	csr, err := csri.Create(csr)
+	if err == nil {
+		info.CSRName = csr.Name
 	}
-	if len(info.CertificateName) == 0 {
-		return nil, fmt.Errorf("Certificate %s created with empty certificate name", id)
-	}
-	if len(info.Certificate) == 0 {
-		return nil, fmt.Errorf("Certificate %s created with empty certificate", id)
+	return &info, err
+}
+
+func approveKubeCSR(csri util.CertificateSigningRequestInterface, csrName string) {
+	glog.Printf("attempting to auto-approve kube csr %s", csrName)
+
+	csr, err := csri.Get(csrName, metav1.GetOptions{})
+	if err != nil {
+		glog.Printf("unexpected error during get kube csr %s: %v", csrName, err)
+		return
 	}
 
+	csr.Status.Conditions = append(csr.Status.Conditions, certificates.CertificateSigningRequestCondition{
+		Type:    certificates.CertificateApproved,
+		Reason:  "Autoapproved",
+		Message: "This csr was approved automatically by scf-secrets-generator",
+	})
+	csr, err = csri.UpdateApproval(csr)
+	if err != nil {
+		glog.Printf("cannot auto-approve kube csr %s: %v\nwaiting for manual approval", csr.Name, err)
+	} else {
+		glog.Printf("kube csr %s has been auto-approved", csr.Name)
+	}
+}
+
+func waitForKubeCSR(csri util.CertificateSigningRequestInterface, info CertInfo) (*CertInfo, error) {
+	name := info.CSRName
+	var csr *certificates.CertificateSigningRequest
+	var err error
+	for retry := 0; ; retry++ {
+		csr, err = csri.Get(name, metav1.GetOptions{})
+		if err != nil {
+			return &info, fmt.Errorf("fetching kube csr %s returned error %s", name, err)
+		}
+		if len(csr.Status.Conditions) > 0 && len(csr.Status.Conditions[0].Type) > 0 {
+			break
+		}
+		switch {
+		case retry == 0:
+			glog.Printf("waiting for kube csr %s to be approved", name)
+			time.Sleep(2 * time.Second)
+		case retry < 10:
+			time.Sleep(5 * time.Second)
+		default:
+			time.Sleep(20 * time.Second)
+		}
+	}
+	cond := csr.Status.Conditions[0]
+	if cond.Type != certificates.CertificateApproved {
+		return &info, fmt.Errorf("kube csr %s failed, condition is %s, reason: %s, message: %s",
+			name, cond.Type, cond.Reason, cond.Message)
+	}
+	info.Certificate = csr.Status.Certificate
 	return &info, nil
+
 }

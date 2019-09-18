@@ -10,6 +10,12 @@ import (
 	"github.com/SUSE/scf-secret-generator/secrets"
 )
 
+var autoApproval = flag.Bool(
+	"autoApproval",
+	false,
+	"Attempt auto-approval of kube certificate signing requests",
+)
+
 var certExpiration = flag.Int(
 	"certExpiration",
 	30*365+7, // just over 30 years
@@ -87,6 +93,7 @@ func main() {
 	}
 
 	sg := secrets.SecretGenerator{
+		AutoApproval:      *autoApproval,
 		CertExpiration:    *certExpiration,
 		ClusterDomain:     *clusterDomain,
 		Domain:            *domain,

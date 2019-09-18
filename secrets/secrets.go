@@ -39,6 +39,7 @@ const generatorSuffix = ".generator"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
+	AutoApproval         bool
 	CertExpiration       int
 	ClusterDomain        string
 	Domain               string
@@ -85,7 +86,12 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	err = sg.generateSecret(manifest, secret, configMap)
+
+	csri, err := sg.getCertificateSigningRequestInterface()
+	if err != nil {
+		return err
+	}
+	err = sg.generateSecret(csri, manifest, secret, configMap)
 	if err != nil {
 		return err
 	}
@@ -134,6 +140,15 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 		return nil, err
 	}
 	return clientset.CoreV1().Secrets(sg.Namespace), nil
+}
+
+// getSecretInterface returns a secrets interface for the namespace
+func (sg *SecretGenerator) getCertificateSigningRequestInterface() (util.CertificateSigningRequestInterface, error) {
+	clientset, err := kubeClientset()
+	if err != nil {
+		return nil, err
+	}
+	return clientset.Certificates().CertificateSigningRequests(), nil
 }
 
 // defaultConfig returns the initial configmap containing the secrets configuration for a new install
@@ -234,7 +249,7 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 // generateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
-func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
+func (sg *SecretGenerator) generateSecret(csri util.CertificateSigningRequestInterface, manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
 	if sg.SecretsGeneration != configMap.Data[currentSecretGenerationKey] {
 		if len(configMap.Data[currentSecretGenerationKey]) > 0 {
 			log.Printf("Rotating secrets; generation `%s` -> `%s`\n", configMap.Data[currentSecretGenerationKey], sg.SecretsGeneration)
@@ -320,7 +335,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	}
 
 	log.Println("Generate SSL certs and keys...")
-	err = ssl.GenerateCerts(certInfo, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, secrets)
+	err = ssl.GenerateCerts(certInfo, csri, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, sg.AutoApproval, secrets)
 	if err != nil {
 		return err
 	}
