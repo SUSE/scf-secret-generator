@@ -69,7 +69,7 @@ type envSettings map[string]string
 var templateEnv = make(envSettings)
 
 func (env *envSettings) String() string {
-	return ""
+	return "<envSettings>"
 }
 
 func (env *envSettings) Set(value string) error {

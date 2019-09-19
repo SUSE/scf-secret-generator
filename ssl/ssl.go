@@ -375,13 +375,21 @@ func waitForKubeCSR(csri util.CertificateSigningRequestInterface, info CertInfo)
 	name := info.CSRName
 	var csr *certificates.CertificateSigningRequest
 	var err error
+
 	for retry := 0; ; retry++ {
 		csr, err = csri.Get(name, metav1.GetOptions{})
 		if err != nil {
 			return &info, fmt.Errorf("fetching kube csr %s returned error %s", name, err)
 		}
-		if len(csr.Status.Conditions) > 0 && len(csr.Status.Conditions[0].Type) > 0 {
-			break
+		for _, condition := range csr.Status.Conditions {
+			switch condition.Type {
+			case certificates.CertificateApproved:
+				info.Certificate = csr.Status.Certificate
+				return &info, nil
+			case certificates.CertificateDenied:
+				return &info, fmt.Errorf("kube csr %s denied, reason: %s, message: %s",
+					name, condition.Reason, condition.Message)
+			}
 		}
 		switch {
 		case retry == 0:
@@ -393,12 +401,4 @@ func waitForKubeCSR(csri util.CertificateSigningRequestInterface, info CertInfo)
 			time.Sleep(20 * time.Second)
 		}
 	}
-	cond := csr.Status.Conditions[0]
-	if cond.Type != certificates.CertificateApproved {
-		return &info, fmt.Errorf("kube csr %s failed, condition is %s, reason: %s, message: %s",
-			name, cond.Type, cond.Reason, cond.Message)
-	}
-	info.Certificate = csr.Status.Certificate
-	return &info, nil
-
 }

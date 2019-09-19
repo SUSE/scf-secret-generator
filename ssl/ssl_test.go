@@ -56,6 +56,9 @@ func (m *MockCertificateSigningRequestInterface) Get(name string, options metav1
 	m.getCount++
 	if (name == string(certificates.CertificateApproved) || name == string(certificates.CertificateDenied)) && m.getCount > 1 {
 		csr.Status.Conditions = append(csr.Status.Conditions, certificates.CertificateSigningRequestCondition{
+			Type: certificates.RequestConditionType("bogus"),
+		})
+		csr.Status.Conditions = append(csr.Status.Conditions, certificates.CertificateSigningRequestCondition{
 			Type:    certificates.RequestConditionType(name),
 			Reason:  "because, why not?",
 			Message: "Seriously!",
@@ -724,7 +727,7 @@ func TestWaitForKubeCSR(t *testing.T) {
 
 		csri.AssertCalled(t, "Get", info.CSRName, metav1.GetOptions{})
 
-		assert.EqualError(t, err, "kube csr Denied failed, condition is Denied, reason: because, why not?, message: Seriously!")
+		assert.EqualError(t, err, "kube csr Denied denied, reason: because, why not?, message: Seriously!")
 	})
 
 	t.Run("waitForKubeCSR returns an error if the CSR cannot be found", func(t *testing.T) {
