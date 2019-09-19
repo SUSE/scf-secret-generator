@@ -1,9 +1,14 @@
 package model
 
 import (
+	"bytes"
 	"errors"
+	"fmt"
 	"io"
 	"io/ioutil"
+	"reflect"
+	"strings"
+	"text/template"
 
 	yaml "gopkg.in/yaml.v2"
 )
@@ -60,28 +65,19 @@ type CVOptions struct {
 	RoleName      string   `json:"role_name,omitempty" yaml:"role_name,omitempty"`
 }
 
-// Internal structure for extracting our CVOptions into a struct
-type internalConfigurationVariable struct {
-	CVOptions CVOptions `yaml:"options"`
-}
-
-// Since we want all keys below options: but still need access to a number of fissile special
-// options.
-type internalVariableDefinitions struct {
-	Variables []*internalConfigurationVariable `yaml:"variables"`
-}
-
 // CertParams was copied from config-server/types/certificate_generator.go for on the fly parsing of certificate options
 type CertParams struct {
-	CommonName       string   `yaml:"common_name"`
 	AlternativeNames []string `yaml:"alternative_names" json:"subject_names,omitempty"`
 	IsCA             bool     `yaml:"is_ca"`
+	AppendKubeCA     bool     `yaml:"append_kube_ca"`
 	CAName           string   `yaml:"ca"`
 	ExtKeyUsage      []string `yaml:"extended_key_usage"`
 }
 
-// GetManifest loads a manifest from file or string
-func GetManifest(r io.Reader) (Manifest, error) {
+// GetManifest loads a manifest from file or string and expands all Go templates
+// under the `variables` key. The `env` parameter provides additional variables
+// that can be referenced from these templates.
+func GetManifest(r io.Reader, env map[string]string) (Manifest, error) {
 	var manifest Manifest
 
 	data, err := ioutil.ReadAll(r)
@@ -89,15 +85,35 @@ func GetManifest(r io.Reader) (Manifest, error) {
 		return manifest, err
 	}
 
+	// Read raw (no schema) manifest so we can expand templates in the variables section.
+	var raw map[string]interface{}
+	err = yaml.Unmarshal(data, &raw)
+	if err != nil {
+		return manifest, err
+	}
+	if raw["variables"] == nil {
+		return manifest, errors.New("'variables' section not found in manifest")
+	}
+
+	// Expand all Golang templates in the `variables` section of the manifest,
+	// using the settings in `env` as configuration variables. Changes are made
+	// in-place, so the actual return value is discarded.
+	_, err = expandTemplates(raw["variables"], env)
+	if err != nil {
+		return manifest, err
+	}
+
+	// Turn manifest with expanded templates back into a string and unmarshal using manifest schema.
+	data, err = yaml.Marshal(raw)
+	if err != nil {
+		return manifest, err
+	}
 	err = yaml.Unmarshal(data, &manifest)
 	if err != nil {
 		return manifest, err
 	}
 
-	if err == nil && manifest.Variables == nil {
-		return manifest, errors.New("'Variables section' not found in manifest")
-	}
-
+	// Validate that we have no duplicate variable names.
 	seen := make(map[string]bool)
 	for _, v := range manifest.Variables {
 		if seen[v.Name] {
@@ -106,26 +122,88 @@ func GetManifest(r io.Reader) (Manifest, error) {
 		seen[v.Name] = true
 	}
 
-	// clean up, since we parse these into CVOptions
-	for _, v := range manifest.Variables {
-		delete(v.Options, "previous_names")
-		delete(v.Options, "generator")
-		delete(v.Options, "secret")
-		delete(v.Options, "immutable")
-		delete(v.Options, "role_name")
-	}
-
-	var definitions internalVariableDefinitions
-	err = yaml.Unmarshal(data, &definitions)
-	if err != nil {
-		return manifest, err
-	}
-
-	for i, v := range definitions.Variables {
-		manifest.Variables[i].CVOptions = v.CVOptions
+	// Parse Options using the CVOptions schema.
+	for i, v := range manifest.Variables {
+		str, err := yaml.Marshal(v.Options)
+		if err != nil {
+			return manifest, err
+		}
+		err = yaml.Unmarshal(str, &manifest.Variables[i].CVOptions)
+		if err != nil {
+			return manifest, err
+		}
 	}
 
 	return manifest, err
+}
+
+// Walk the tree and expand templates in-place in all string nodes.
+func expandTemplates(node interface{}, env map[string]string) (interface{}, error) {
+	if node == nil {
+		// Must return `node` here to get a "typed nil".
+		return node, nil
+	}
+
+	switch reflect.TypeOf(node).Kind() {
+	case reflect.Map:
+		valueOf := reflect.ValueOf(node)
+		for _, key := range valueOf.MapKeys() {
+			elem := valueOf.MapIndex(key).Interface()
+			if elem != nil {
+				newNode, err := expandTemplates(elem, env)
+				if err != nil {
+					return nil, err
+				}
+				if newNode == nil {
+					valueOf.SetMapIndex(key, reflect.Zero(valueOf.MapIndex(key).Type()))
+				} else {
+					valueOf.SetMapIndex(key, reflect.ValueOf(newNode))
+				}
+			}
+		}
+		return valueOf.Interface(), nil
+
+	case reflect.Slice:
+		valueOf := reflect.ValueOf(node)
+		for i := 0; i < valueOf.Len(); i++ {
+			elemValue := valueOf.Index(i)
+			newNode, err := expandTemplates(elemValue.Interface(), env)
+			if err != nil {
+				return nil, err
+			}
+			if newNode == nil {
+				elemValue.Set(reflect.Zero(elemValue.Type()))
+			} else {
+				elemValue.Set(reflect.ValueOf(newNode))
+			}
+		}
+		return valueOf.Interface(), nil
+
+	case reflect.String:
+		str := node.(string)
+		if strings.Contains(str, "{{") {
+			t, err := template.New("").Parse(str)
+			if err != nil {
+				return nil, fmt.Errorf("Can't parse template in `%s`: %v", str, err)
+			}
+			buf := &bytes.Buffer{}
+			err = t.Execute(buf, env)
+			if err != nil {
+				return nil, err
+			}
+			// If the string is a template expression from start to end, then run the
+			// result through YAML parsing again to allow the result to change type
+			// from string to boolean/number/null.
+			if strings.HasPrefix(str, "{{") && strings.HasSuffix(str, "}}") {
+				var data interface{}
+				err = yaml.Unmarshal(buf.Bytes(), &data)
+				return data, err
+			}
+			return buf.String(), nil
+		}
+	}
+
+	return node, nil
 }
 
 // OptionsAsCertificateParams returns the variables options as a struct of certificate parameters
@@ -142,20 +220,4 @@ func (cv *VariableDefinition) OptionsAsCertificateParams() (CertParams, error) {
 	}
 
 	return params, nil
-}
-
-// SetOptions updates the variables options from the certificate parameters
-func (cv *VariableDefinition) SetOptions(params interface{}) error {
-	str, err := yaml.Marshal(params)
-	if err != nil {
-		return err
-	}
-
-	options := VariableOptions{}
-	err = yaml.Unmarshal(str, &options)
-	if err != nil {
-		return err
-	}
-	cv.Options = options
-	return nil
 }

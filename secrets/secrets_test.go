@@ -466,44 +466,6 @@ func TestGetSecret(t *testing.T) {
 	})
 }
 
-func TestExpandTemplates(t *testing.T) {
-	t.Parallel()
-
-	sg := testingSecretGenerator()
-
-	manifest := model.Manifest{
-		Variables: model.Variables{
-			{
-				Name: "ssl-cert",
-				Type: model.VariableTypeCertificate,
-				Options: model.VariableOptions{
-					"common_name": "foo.{{.KUBERNETES_NAMESPACE}}",
-					"alternative_names": []string{
-						"*.{{.DOMAIN}}",
-						"foo.{{.KUBERNETES_NAMESPACE}}",
-						"svc.{{.KUBERNETES_CLUSTER_DOMAIN}}"},
-				},
-				CVOptions: model.CVOptions{
-					Secret: true,
-				},
-			},
-		},
-	}
-
-	err := sg.expandTemplates(manifest)
-	assert.NoError(t, err)
-
-	params, err := manifest.Variables[0].OptionsAsCertificateParams()
-	assert.NoError(t, err)
-	assert.Equal(t, "foo.namespace", params.CommonName)
-
-	names := params.AlternativeNames
-	assert.Len(t, names, 3)
-	assert.Equal(t, "*.domain", names[0])
-	assert.Equal(t, "foo.namespace", names[1])
-	assert.Equal(t, "svc.cluster.domain", names[2])
-}
-
 func TestGeneratePasswordSecret(t *testing.T) {
 	t.Parallel()
 
@@ -536,7 +498,7 @@ func TestGeneratePasswordSecret(t *testing.T) {
 
 		assert.Equal(t, []byte("obsolete"), secrets.Data["non-generated"])
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Empty(t, secrets.Data["non-generated"])
@@ -570,7 +532,7 @@ func TestGeneratePasswordSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["dirty"])
 		assert.Empty(t, secrets.Data["dirty"+generatorSuffix])
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["dirty"])
@@ -606,7 +568,7 @@ func TestGeneratePasswordSecret(t *testing.T) {
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 		assert.NotEmpty(t, generatorInput)
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
@@ -642,7 +604,7 @@ func TestGeneratePasswordSecret(t *testing.T) {
 		generatorInput := secrets.Data["clean"+generatorSuffix]
 
 		sg.SecretsGeneration = "2"
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["clean"])
@@ -680,7 +642,7 @@ func TestGeneratePasswordSecret(t *testing.T) {
 		setSecret(secrets, manifest.Variables[0], "clean")
 
 		sg.SecretsGeneration = "2"
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("clean"), secrets.Data["clean"])
@@ -719,7 +681,7 @@ func TestGenerateSSHSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ssh-key"+model.FingerprintSuffix])
 		assert.Empty(t, secrets.Data["ssh-key"+generatorSuffix])
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssh-key"])
@@ -753,7 +715,7 @@ func TestGenerateSSHSecret(t *testing.T) {
 		setSecret(secrets, manifest.Variables[0], "key")
 		setSecretFingerprint(secrets, manifest.Variables[0], "fingerprint")
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("key"), secrets.Data["ssh-key"])
@@ -796,7 +758,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ca-cert"+generatorSuffix])
 		assert.Empty(t, secrets.Data["ca-cert-key"])
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ca-cert"])
@@ -835,7 +797,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		setSecret(secrets, manifest.Variables[0], "cert")
 		setSecretKey(secrets, manifest.Variables[0], "key")
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("cert"), secrets.Data["ca-cert"])
@@ -884,7 +846,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		assert.Empty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.Empty(t, secrets.Data["ssl-cert-key"])
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])
@@ -929,7 +891,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		setSecret(secrets, manifest.Variables[1], "cert-data")
 		setSecretKey(secrets, manifest.Variables[1], "key-data")
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.Equal(t, []byte("cert-data"), secrets.Data["ssl-cert"])
@@ -992,7 +954,7 @@ func TestGenerateSSLSecret(t *testing.T) {
 		assert.NotEmpty(t, secrets.Data["ssl-cert"+generatorSuffix])
 		assert.NotContains(t, string(secrets.Data["ssl-cert"+generatorSuffix]), "alternative_names")
 
-		err := sg.generateSecret(manifest, secrets, configMap)
+		err := sg.generateSecret(nil, manifest, secrets, configMap)
 
 		require.NoError(t, err)
 		assert.NotEmpty(t, secrets.Data["ssl-cert"])

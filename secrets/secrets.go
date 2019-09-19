@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"encoding/json"
 	"fmt"
-	"html/template"
 	"io"
 	"log"
 	"strings"
@@ -40,6 +39,7 @@ const generatorSuffix = ".generator"
 
 // SecretGenerator contains all global state for creating new secrets
 type SecretGenerator struct {
+	AutoApproval         bool
 	CertExpiration       int
 	ClusterDomain        string
 	Domain               string
@@ -48,6 +48,7 @@ type SecretGenerator struct {
 	SecretsConfigMapName string
 	SecretsGeneration    string
 	SecretsName          string
+	TemplateEnv          map[string]string
 }
 
 // Generate will fetch the current secrets, generate any missing values, and writes the new secrets
@@ -80,15 +81,17 @@ func (sg *SecretGenerator) Generate(manifestReader io.Reader) error {
 	if err != nil {
 		return err
 	}
-	manifest, err := model.GetManifest(manifestReader)
+
+	manifest, err := model.GetManifest(manifestReader, sg.TemplateEnv)
 	if err != nil {
 		return err
 	}
-	err = sg.expandTemplates(manifest)
+
+	csri, err := sg.getCertificateSigningRequestInterface()
 	if err != nil {
 		return err
 	}
-	err = sg.generateSecret(manifest, secret, configMap)
+	err = sg.generateSecret(csri, manifest, secret, configMap)
 	if err != nil {
 		return err
 	}
@@ -137,6 +140,15 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 		return nil, err
 	}
 	return clientset.CoreV1().Secrets(sg.Namespace), nil
+}
+
+// getCertificateSigningRequestInterface returns a csr interface
+func (sg *SecretGenerator) getCertificateSigningRequestInterface() (util.CertificateSigningRequestInterface, error) {
+	clientset, err := kubeClientset()
+	if err != nil {
+		return nil, err
+	}
+	return clientset.Certificates().CertificateSigningRequests(), nil
 }
 
 // defaultConfig returns the initial configmap containing the secrets configuration for a new install
@@ -234,61 +246,10 @@ func (sg *SecretGenerator) getSecret(s secretInterface, configMap *v1.ConfigMap)
 	return newSecret, nil
 }
 
-func (sg *SecretGenerator) expandTemplates(manifest model.Manifest) error {
-	for _, configVar := range manifest.Variables {
-		if configVar.Type != model.VariableTypeCertificate {
-			continue
-		}
-
-		params, err := configVar.OptionsAsCertificateParams()
-		if err != nil {
-			return fmt.Errorf("Can't parse certificate config variable `%s`: %s", configVar.Name, err)
-		}
-
-		buf, err := sg.expandDomainName(configVar.Name, params.CommonName)
-		if err != nil {
-			return err
-		}
-		params.CommonName = buf
-
-		for index, name := range params.AlternativeNames {
-			buf, err := sg.expandDomainName(configVar.Name, name)
-			if err != nil {
-				return err
-			}
-			params.AlternativeNames[index] = buf
-		}
-
-		err = configVar.SetOptions(params)
-		if err != nil {
-			return err
-		}
-	}
-	return nil
-}
-
-func (sg *SecretGenerator) expandDomainName(configVarName string, name string) (string, error) {
-	mapping := map[string]string{
-		"DOMAIN":                    sg.Domain,
-		"KUBERNETES_CLUSTER_DOMAIN": sg.ClusterDomain,
-		"KUBERNETES_NAMESPACE":      sg.Namespace,
-	}
-	t, err := template.New("").Parse(name)
-	if err != nil {
-		return "", fmt.Errorf("Can't parse subject name `%s` for config variable `%s`: %s", name, configVarName, err)
-	}
-	buf := &bytes.Buffer{}
-	err = t.Execute(buf, mapping)
-	if err != nil {
-		return "", err
-	}
-	return buf.String(), nil
-}
-
 // generateSecret will generate all secrets defined in the manifest that don't already exist
 // in the secret. If secrets rotation is triggered, then all secrets not marked as immutable
 // in the manifest will be regenerated.
-func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
+func (sg *SecretGenerator) generateSecret(csri util.CertificateSigningRequestInterface, manifest model.Manifest, secrets *v1.Secret, configMap *v1.ConfigMap) error {
 	if sg.SecretsGeneration != configMap.Data[currentSecretGenerationKey] {
 		if len(configMap.Data[currentSecretGenerationKey]) > 0 {
 			log.Printf("Rotating secrets; generation `%s` -> `%s`\n", configMap.Data[currentSecretGenerationKey], sg.SecretsGeneration)
@@ -374,7 +335,7 @@ func (sg *SecretGenerator) generateSecret(manifest model.Manifest, secrets *v1.S
 	}
 
 	log.Println("Generate SSL certs and keys...")
-	err = ssl.GenerateCerts(certInfo, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, secrets)
+	err = ssl.GenerateCerts(certInfo, csri, sg.Namespace, sg.ClusterDomain, sg.CertExpiration, sg.AutoApproval, secrets)
 	if err != nil {
 		return err
 	}
