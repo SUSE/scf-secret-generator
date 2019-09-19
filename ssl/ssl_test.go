@@ -398,7 +398,7 @@ func TestCreateCA(t *testing.T) {
 
 		assert.NotEqual(t, secrets.Data[certInfo[certID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[certID].CertificateName], []byte{})
-		assert.Regexp(t, "(?s)\\A-----BEGIN CERTIFICATE-----\\n.*\\n-----END CERTIFICATE-----\\n\\z",
+		assert.Regexp(t, `(?s)\A-----BEGIN CERTIFICATE-----\n.*\n-----END CERTIFICATE-----\n\z`,
 			string(secrets.Data[certInfo[certID].CertificateName]))
 	})
 
@@ -418,7 +418,7 @@ func TestCreateCA(t *testing.T) {
 		assert.NotEqual(t, secrets.Data[certInfo[certID].PrivateKeyName], []byte{})
 		assert.NotEqual(t, secrets.Data[certInfo[certID].CertificateName], []byte{})
 		assert.Contains(t, string(secrets.Data[certInfo[certID].CertificateName]),
-			"-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----")
+			"-----END CERTIFICATE-----\n-----BEGIN CERTIFICATE-----\nThisIsJustTestData")
 	})
 }
 
@@ -608,15 +608,18 @@ func TestCreateCert(t *testing.T) {
 			CAName:          "",
 		}
 		secrets := &v1.Secret{Data: map[string][]byte{}}
+		csrName := "namespace-" + certID
 
 		var csri MockCertificateSigningRequestInterface
+		csri.On("Delete", csrName, &metav1.DeleteOptions{})
 		csri.On("Create", mock.AnythingOfType("*v1beta1.CertificateSigningRequest"))
 
 		newCert, err := createCert(certInfo, &csri, "namespace", "cluster.domain", secrets, certID, 365, false)
+		csri.AssertCalled(t, "Delete", csrName, &metav1.DeleteOptions{})
 		csri.AssertCalled(t, "Create", mock.Anything)
 
 		require.NoError(t, err)
-		assert.Equal(t, newCert.CSRName, "namespace-"+certID)
+		assert.Equal(t, newCert.CSRName, csrName)
 	})
 
 	t.Run("Create a kube csr, with auto-approval", func(t *testing.T) {
@@ -633,11 +636,13 @@ func TestCreateCert(t *testing.T) {
 		csrName := "namespace-" + certID
 
 		var csri MockCertificateSigningRequestInterface
+		csri.On("Delete", csrName, &metav1.DeleteOptions{})
 		csri.On("Create", mock.AnythingOfType("*v1beta1.CertificateSigningRequest"))
 		csri.On("Get", csrName, metav1.GetOptions{})
 		csri.On("UpdateApproval", mock.AnythingOfType("*v1beta1.CertificateSigningRequest"))
 
 		newCert, err := createCert(certInfo, &csri, "namespace", "cluster.domain", secrets, certID, 365, true)
+		csri.AssertCalled(t, "Delete", csrName, &metav1.DeleteOptions{})
 		csri.AssertCalled(t, "Create", mock.Anything)
 		csri.AssertCalled(t, "Get", csrName, metav1.GetOptions{})
 		csri.AssertCalled(t, "UpdateApproval", mock.Anything)
@@ -656,15 +661,18 @@ func TestCreateKubeCSR(t *testing.T) {
 		var csri MockCertificateSigningRequestInterface
 		info := CertInfo{CAName: ""}
 		request := []byte("my-request")
+		csrName := "namespace-foo-bar"
 
+		csri.On("Delete", csrName, &metav1.DeleteOptions{})
 		csri.On("Create", mock.AnythingOfType("*v1beta1.CertificateSigningRequest"))
 
 		newCert, err := createKubeCSR(&csri, request, info, "namespace", "FOO_BAR", false)
 
+		csri.AssertCalled(t, "Delete", csrName, &metav1.DeleteOptions{})
 		csri.AssertCalled(t, "Create", mock.Anything)
 
 		require.NoError(t, err)
-		assert.Equal(t, newCert.CSRName, "namespace-foo-bar")
+		assert.Equal(t, newCert.CSRName, csrName)
 	})
 }
 

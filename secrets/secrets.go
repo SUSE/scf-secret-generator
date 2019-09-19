@@ -142,7 +142,7 @@ func (sg *SecretGenerator) getSecretInterface() (secretInterface, error) {
 	return clientset.CoreV1().Secrets(sg.Namespace), nil
 }
 
-// getSecretInterface returns a secrets interface for the namespace
+// getCertificateSigningRequestInterface returns a csr interface
 func (sg *SecretGenerator) getCertificateSigningRequestInterface() (util.CertificateSigningRequestInterface, error) {
 	clientset, err := kubeClientset()
 	if err != nil {

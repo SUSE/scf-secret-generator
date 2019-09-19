@@ -74,7 +74,9 @@ type CertParams struct {
 	ExtKeyUsage      []string `yaml:"extended_key_usage"`
 }
 
-// GetManifest loads a manifest from file or string
+// GetManifest loads a manifest from file or string and expands all Go templates
+// under the `variables` key. The `env` parameter provides additional variables
+// that can be referenced from these templates.
 func GetManifest(r io.Reader, env map[string]string) (Manifest, error) {
 	var manifest Manifest
 
@@ -93,6 +95,9 @@ func GetManifest(r io.Reader, env map[string]string) (Manifest, error) {
 		return manifest, errors.New("'variables' section not found in manifest")
 	}
 
+	// Expand all Golang templates in the `variables` section of the manifest,
+	// using the settings in `env` as configuration variables. Changes are made
+	// in-place, so the actual return value is discarded.
 	_, err = expandTemplates(raw["variables"], env)
 	if err != nil {
 		return manifest, err

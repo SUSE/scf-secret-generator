@@ -338,7 +338,11 @@ func createKubeCSR(csri util.CertificateSigningRequestInterface, request []byte,
 		},
 	}
 	glog.Printf("create kube csr %s", csr.Name)
-	csr, err := csri.Create(csr)
+	err := csri.Delete(csr.Name, &metav1.DeleteOptions{})
+	if err == nil {
+		glog.Printf("kube csr %s already existed and has been deleted", csr.Name)
+	}
+	csr, err = csri.Create(csr)
 	if err == nil {
 		info.CSRName = csr.Name
 	}
