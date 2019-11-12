@@ -189,7 +189,7 @@ func GenerateCerts(certInfo map[string]CertInfo, csri util.CertificateSigningReq
 }
 
 func rsaKeyRequest() *csr.BasicKeyRequest {
-	return &csr.BasicKeyRequest{A: "rsa", S: 4096}
+	return &csr.BasicKeyRequest{A: "rsa", S: 2048}
 }
 
 func createCA(certInfo map[string]CertInfo, secrets *v1.Secret, id string, expiration int) error {

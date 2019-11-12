@@ -362,7 +362,7 @@ func TestRsaKeyRequest(t *testing.T) {
 	t.Parallel()
 
 	kr := rsaKeyRequest()
-	assert.Equal(t, 4096, kr.S)
+	assert.Equal(t, 2048, kr.S)
 }
 
 func TestCreateCA(t *testing.T) {
